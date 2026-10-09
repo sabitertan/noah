@@ -67,11 +67,37 @@ python -m noah.cli ask "calculate 15% of 240" --engine embedding
 
 | Slot | Choices today | Add your own |
 |---|---|---|
-| Decision engine | `keyword`, `embedding` | implement `DecisionEngine` in `noah/engines/` |
+| Decision engine | `keyword`, `embedding`, `llm_tools` | implement `DecisionEngine` in `noah/engines/` |
 | Orchestrator | `route` (best expert), `fanout` (several) | `noah/orchestrator.py` |
 | Argument extractor | `rule`, `openai_compat` (any small model, schema-constrained JSON) | `noah/extractors/` |
 
 Orchestrator profiles (a saved combination of the above) are created in the UI and stored in `data/profiles.json`.
+
+## LLM orchestrators (Nemotron, FunctionGemma)
+
+Besides score-based engines (`keyword`, `embedding`), the `llm_tools` engine hands the experts to a tool-calling
+model as tools. The model picks the expert **and** its arguments in one call (with an explicit "none" tool so it can
+decline), so no separate extractor model runs. Two example profiles ship next to `Default`:
+
+```bash
+ollama pull hf.co/MaziyarPanahi/Nemotron-Orchestrator-8B-GGUF:Q4_K_M   # 5 GB
+ollama pull hf.co/ggml-org/functiongemma-270m-it-GGUF:Q8_0             # 300 MB
+```
+
+Measured on this repo's 28 labelled messages + 4 off-topic ones (`scripts/bench_orchestrators.py`), GTX 1070 8 GB:
+
+| Orchestrator | Routes correctly | Declines off-topic | Time per decision |
+|---|---|---|---|
+| `embedding` (Default, threshold 0.63) | 28/28 | 4/4 | ~5 ms |
+| Nemotron-Orchestrator-8B Q4_K_M | 19/28 | 4/4 | median 9 s (about 50 s on first load) |
+| FunctionGemma 270M Q8_0 | 9/28 | 3/4 | median 0.6 s |
+
+Read this as: the zero-shot LLM orchestrators are examples, not recommendations. Nemotron picks arguments well but
+often answers directly instead of calling an expert, and is slow on a small GPU. FunctionGemma is meant to be
+fine-tuned (the traces are the data for that). The embedding engine wins on this small, easy test set, but its
+off-topic margin is thin (0.61 vs 0.65), so re-tune the threshold when you add experts.
+Check each model's license before use: a third-party listing says Nemotron-Orchestrator-8B is research-only, and
+FunctionGemma is under the Gemma terms.
 
 ## Adding an expert
 

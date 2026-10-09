@@ -11,4 +11,8 @@ def make_engine(name: str, **kwargs) -> DecisionEngine:
         from .embedding import EmbeddingEngine
 
         return EmbeddingEngine(**kwargs)
+    if name == "llm_tools":
+        from .llm_tools import LLMToolsEngine
+
+        return LLMToolsEngine(**kwargs)
     raise ValueError(f"unknown decision engine: {name}")

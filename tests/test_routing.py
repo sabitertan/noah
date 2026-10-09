@@ -82,3 +82,13 @@ def test_bad_args_reported_not_raised(experts):
     orch = Orchestrator(experts, make_engine("keyword"), make_extractor("rule"), threshold=0.0)
     out = asyncio.run(orch.ask("weather"))  # no city -> rule extractor returns {} -> validation error
     assert out[0].error and "city" in out[0].error
+
+
+OFF_TOPIC = ["tell me a joke", "who won the world cup in 2010", "what's the capital of Australia", "hello there"]
+
+
+def test_embedding_declines_off_topic_at_default_threshold(experts):
+    """The default profile's threshold (0.63) must separate chit-chat from every labelled in-domain message."""
+    engine = make_engine("embedding")
+    assert all(engine.decide(m, experts)[0].score >= 0.63 for m, _ in LABELLED)
+    assert all(engine.decide(m, experts)[0].score < 0.63 for m in OFF_TOPIC)

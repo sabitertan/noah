@@ -94,3 +94,7 @@ user message
   Not verified: real Docker (not installed here), NVIDIA GPU overlay, `podman compose` with the docker-compose provider.
   Bugs found while verifying: podman-compose pod ignored keep-id (fixed with `x-podman: in_pod: false`);
   uvicorn needs `watchfiles` for `--reload-include`; trace-write failure no longer fails requests.
+- LLM orchestrators added (`llm_tools` engine; Nemotron-Orchestrator-8B and FunctionGemma example profiles).
+  28 labelled + 4 off-topic: embedding 28/28 & 4/4 (only after threshold 0.25 -> 0.63; before, it declined nothing),
+  Nemotron 19/28 & 4/4 (median 9 s), FunctionGemma 9/28 & 3/4 (0.6 s). Router now calls the engine in a thread.
+  Caveat: the Nemotron run overlapped with other GPU work (one 300 s timeout), so its latency is pessimistic.

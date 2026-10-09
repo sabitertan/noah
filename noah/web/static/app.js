@@ -29,6 +29,7 @@ let profiles = [];
 let chats = store.get('chats', []);
 let currentChat = store.get('current', null);
 let activeProfile = store.get('profile', 'Default');
+const shortModel = m => String(m || '').replace(/^hf\.co\//, '').split('/').pop();
 let view = 'chat', editing = null, busy = false;
 
 /* ---------- sidebar ---------- */
@@ -118,7 +119,7 @@ async function send() {
   const m = { text, pending: true }; c.messages.push(m); renderChat(); renderSidebar(); $('title').textContent = c.title;
   try {
     const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      message: text, engine: p.engine, mode: p.mode, extractor: p.extractor, model: p.model, threshold: p.threshold }) });
+      message: text, engine: p.engine, engine_model: p.engine_model || '', mode: p.mode, extractor: p.extractor, model: p.model, threshold: p.threshold }) });
     if (!r.ok) throw new Error('server error ' + r.status);
     Object.assign(m, await r.json(), { profile: p.name, engine: p.engine });
   } catch (err) { m.error = err.message; }
@@ -133,21 +134,23 @@ function renderOrch() {
   const opts = (items, v) => items.map(i => `<option ${i === v ? 'selected' : ''}>${esc(i)}</option>`).join('');
   $('orchPanel').innerHTML = `<h2>Orchestrators</h2><p class="lede">An orchestrator is a saved combination of decision engine, orchestration mode and argument extractor. Create as many as you like.</p>
     <div class="cards">${profiles.map((x, i) => `<div class="card ${i === editing ? 'sel' : ''}" data-edit="${i}"><h3>${svg('cpu')}${esc(x.name)}${x.name === activeProfile ? '<span class="badge">active</span>' : ''}</h3>
-      <p>${esc(x.engine)} → ${esc(x.mode)} → ${esc(x.extractor)}${x.extractor === 'openai_compat' ? ' (' + esc(x.model) + ')' : ''}</p></div>`).join('')}
+      <p>${esc(x.engine)}${x.engine === 'llm_tools' ? ' (' + esc(shortModel(x.engine_model)) + ')' : ''} → ${esc(x.mode)} → ${x.engine === 'llm_tools' ? 'model args' : esc(x.extractor) + (x.extractor === 'openai_compat' ? ' (' + esc(x.model) + ')' : '')}</p></div>`).join('')}
       <div class="card" data-new style="cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)">${svg('plus')}&nbsp;New orchestrator</div></div>
     <div class="form">
       <label>Name</label><input id="f-name" value="${esc(p.name)}">
       <label>Decision engine</label><select id="f-engine">${opts(cfg.engines, p.engine)}</select>
+      <label id="l-em" ${p.engine === 'llm_tools' ? '' : 'hidden'}>Orchestrator model</label><select id="f-em" ${p.engine === 'llm_tools' ? '' : 'hidden'}>${opts(cfg.models.length ? cfg.models : [p.engine_model || ''], p.engine_model || '')}</select>
       <label>Orchestration</label><select id="f-mode">${opts(cfg.modes, p.mode)}</select>
       <label>Argument extractor</label><select id="f-extractor">${opts(cfg.extractors, p.extractor)}</select>
-      <label>Tiny model</label><select id="f-model" ${p.extractor === 'openai_compat' ? '' : 'disabled'}>${opts(cfg.models.length ? cfg.models : [p.model], p.model)}</select>
+      <label>Tiny model</label><select id="f-model" ${p.extractor === 'openai_compat' ? '' : 'disabled'}><option value="" ${p.model ? '' : 'selected'}>—</option>${opts(cfg.models.length ? cfg.models : [p.model], p.model)}</select>
       <label>Threshold <span id="f-thv">${p.threshold}</span></label><input type="range" id="f-threshold" min="0" max="1" step="0.05" value="${p.threshold}">
     </div>
     <div class="actions"><button class="btn primary" id="f-save">Save</button><button class="btn" id="f-use">Use in chat</button><button class="btn danger" id="f-del" ${profiles.length < 2 ? 'disabled' : ''}>Delete</button></div>`;
+  $('f-engine').onchange = () => { const on = $('f-engine').value === 'llm_tools'; $('l-em').hidden = $('f-em').hidden = !on; };
   $('f-extractor').onchange = () => { $('f-model').disabled = $('f-extractor').value !== 'openai_compat'; };
   $('f-threshold').oninput = () => { $('f-thv').textContent = $('f-threshold').value; };
   const collect = () => { const old = p.name; Object.assign(p, { name: $('f-name').value.trim() || old, engine: $('f-engine').value, mode: $('f-mode').value,
-    extractor: $('f-extractor').value, model: $('f-model').value, threshold: parseFloat($('f-threshold').value) }); if (activeProfile === old) activeProfile = p.name; store.set('profile', activeProfile); };
+    extractor: $('f-extractor').value, model: $('f-model').value, engine_model: $('f-em').value, threshold: parseFloat($('f-threshold').value) }); if (activeProfile === old) activeProfile = p.name; store.set('profile', activeProfile); };
   $('f-save').onclick = async () => { collect(); await saveProfiles(); renderOrch(); renderSidebar(); };
   $('f-use').onclick = async () => { collect(); activeProfile = p.name; store.set('profile', activeProfile); await saveProfiles(); show('chat'); };
   $('f-del').onclick = async () => { profiles.splice(editing, 1); editing = 0; if (!profiles.find(x => x.name === activeProfile)) activeProfile = profiles[0].name; await saveProfiles(); renderOrch(); renderSidebar(); };
@@ -165,9 +168,16 @@ function renderExperts() {
       <details><summary>examples</summary>${e.examples.map(x => `<div><code>${esc(x)}</code></div>`).join('')}</details></div>`).join('')}</div>`;
 }
 function renderModels() {
-  const used = m => profiles.filter(p => p.extractor === 'openai_compat' && p.model === m).map(p => p.name).join(', ') || '—';
+  const norm = m => { m = String(m || ''); return m && !m.split('/').pop().includes(':') ? m + ':latest' : m; };  // "x" == "x:latest"
+  const orchestrators = m => profiles.flatMap(p => [
+    ...(p.engine === 'llm_tools' && norm(p.engine_model) === norm(m) ? [`${p.name} (orchestrator)`] : []),
+    ...(p.engine !== 'llm_tools' && p.extractor === 'openai_compat' && norm(p.model) === norm(m) ? [`${p.name} (extractor)`] : []),
+  ]);
+  const experts = m => cfg.experts.filter(e => e.kind === 'generate' && norm(e.model) === norm(m)).map(e => e.name);
+  const cell = list => list.length ? list.map(x => `<div>${esc(x)}</div>`).join('') : '<span class="meta">—</span>';
   $('modelsPanel').innerHTML = `<h2>Models</h2><p class="lede">Local models served by Ollama. Pull more with <code>ollama pull &lt;name&gt;</code>; any OpenAI-compatible server works through the same extractor.</p>
-    ${cfg.models.length ? `<table><tr><th>Model</th><th>Used by orchestrators</th></tr>${cfg.models.map(m => `<tr><td>${esc(m)}</td><td>${esc(used(m))}</td></tr>`).join('')}</table>` : '<p class="lede">No local models found. Is Ollama running?</p>'}`;
+    ${cfg.models.length ? `<table><tr><th>Model</th><th>Used by orchestrators</th><th>Used by experts</th></tr>${cfg.models.map(m =>
+      `<tr><td>${esc(m)}</td><td>${cell(orchestrators(m))}</td><td>${cell(experts(m))}</td></tr>`).join('')}</table>` : '<p class="lede">No local models found. Is Ollama running?</p>'}`;
 }
 async function renderTraces() {
   const t = await (await fetch('/api/traces?limit=100')).json();

@@ -29,7 +29,7 @@ class Router(Executor):
 
     @handler
     async def route(self, message: str, ctx: WorkflowContext[Routed]) -> None:
-        decisions = self.engine.decide(message, self.experts)
+        decisions = await asyncio.to_thread(self.engine.decide, message, self.experts)  # LLM engines block for seconds
         self.seen["decisions"] = decisions
         ranked = [d for d in decisions if d.score >= self.threshold]
         if self.mode == "fanout":
@@ -61,7 +61,11 @@ class ExpertNode(Executor):
                     out = re.sub(pattern, "", out, flags=re.S | re.I)
                 out = re.sub(r"\n{3,}", "\n\n", out).strip()
             else:
-                args = await asyncio.to_thread(self.extractor.extract, routed.message, self.expert)
+                supplied = next((d.args for d in routed.decisions if d.expert == self.expert.name and d.args), None)
+                if supplied:  # an LLM orchestrator already produced the arguments: skip the extractor model call
+                    args, extractor = supplied, "orchestrator"
+                else:
+                    args = await asyncio.to_thread(self.extractor.extract, routed.message, self.expert)
                 validate_args(args, self.expert.parameters)
                 out = await asyncio.to_thread(self.expert.run, args)
         except Exception as e:

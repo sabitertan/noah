@@ -30,6 +30,7 @@ class Expert:
 class Decision:
     expert: str
     score: float
+    args: dict[str, Any] | None = None  # set when an LLM orchestrator already chose the arguments
 
 
 @dataclass
