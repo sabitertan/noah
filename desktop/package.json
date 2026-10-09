@@ -1,0 +1,65 @@
+{
+  "name": "noah-desktop",
+  "version": "0.1.0",
+  "description": "Noah desktop shell: starts the local Noah server and shows its UI",
+  "main": "main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "node launch.js",
+    "smoke": "node launch.js --smoke",
+    "build:sidecar": "python ../desktop/build_sidecar.py",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "author": "Noah contributors",
+  "build": {
+    "appId": "dev.noah.desktop",
+    "productName": "Noah",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "launch.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "sidecar/dist/noah-server",
+        "to": "noah-server"
+      },
+      {
+        "from": "../experts",
+        "to": "experts"
+      },
+      {
+        "from": "../data/files",
+        "to": "sample-files"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "afterPack": "after-pack.js"
+  },
+  "homepage": "https://github.com/sabitertan/noah"
+}

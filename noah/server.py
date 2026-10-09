@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
 from dataclasses import asdict
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -21,6 +22,60 @@ WEB = Path(__file__).parent / "web"
 OLLAMA = os.environ.get("NOAH_LLM_URL", "http://localhost:11434")
 
 app = FastAPI(title="noah")
+
+# Desktop mode: the Electron shell sets a per-launch secret. Without it any web page the user visits could call
+# http://127.0.0.1:<port>/api (CSRF / DNS rebinding), so we also pin the Host header to loopback names.
+LAUNCH_TOKEN = os.environ.get("NOAH_LAUNCH_TOKEN", "")
+
+
+def _pid_alive(pid: int) -> bool:
+    """Existence check without side effects. On Windows os.kill(pid, 0) would TERMINATE the process, so use the API."""
+    if os.name == "nt":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        kernel32.CloseHandle(handle)
+        return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, owned by someone else
+    return True
+
+
+def _exit_with_parent(pid: int) -> None:
+    """Desktop mode: if the Electron shell dies (even by crash), don't leave an orphaned server behind."""
+    import threading
+    import time
+
+    def watch():
+        while _pid_alive(pid):
+            time.sleep(2)
+        os._exit(0)
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
+if os.environ.get("NOAH_PARENT_PID", "").isdigit():
+    _exit_with_parent(int(os.environ["NOAH_PARENT_PID"]))
+
+
+@app.middleware("http")
+async def launch_guard(request: Request, call_next):
+    if LAUNCH_TOKEN:
+        host = request.headers.get("host", "").rsplit(":", 1)[0].strip("[]").lower()
+        supplied = request.cookies.get("noah_token", "") or request.headers.get("authorization", "").removeprefix("Bearer ")
+        if host not in ("127.0.0.1", "localhost", "::1") or not hmac.compare_digest(supplied, LAUNCH_TOKEN):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return await call_next(request)
+
 app.mount("/static", StaticFiles(directory=WEB / "static"), name="static")
 PROFILES = Path(os.environ.get("NOAH_PROFILES", "data/profiles.json"))
 DEFAULT_PROFILES = [

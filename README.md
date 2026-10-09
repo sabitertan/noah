@@ -51,6 +51,28 @@ Ollama is not published to the host, so a host Ollama on port 11434 keeps workin
 Other targets: `make test` (tests inside the image), `make logs`, `make shell`, `make down`,
 `make pull-models M=qwen2.5-coder:3b`. Change the default models with `NOAH_MODELS="a b" make up`.
 
+## Desktop app (Electron)
+
+The desktop app is an extra shell around the same server and web UI. The browser UI (`make up`, `uvicorn`) is unchanged
+and stays fully supported. The shell starts the server on a random loopback port with a per-launch secret (HttpOnly
+cookie + Host check, so other web pages can't call it), shows the UI in a locked-down window, and stops the server on exit.
+
+```bash
+cd desktop && npm install
+npm start                          # dev: uses ../.venv (or NOAH_PYTHON); needs the Python deps installed
+python ../desktop/build_sidecar.py # freeze the server with PyInstaller (run in the project venv, ~170 MB)
+npm run dist                       # installer in desktop/dist/ (AppImage on Linux, NSIS .exe on Windows, .dmg on macOS)
+```
+
+- PyInstaller and Electron don't cross-compile. `.github/workflows/desktop.yml` builds all three OSes on real runners
+  (Actions tab > "Desktop builds" > Run workflow); download the installers from the run's Artifacts.
+- Installed apps keep editable experts, profiles, traces and models in the OS user-data folder
+  (Linux: `~/.config/noah-desktop`), seeded on first run. The first embedding-engine use downloads about 70 MB.
+- Builds are unsigned: expect a Windows SmartScreen or macOS Gatekeeper warning.
+- Linux on Wayland + NVIDIA: Electron's native Wayland path crashed here, so Linux starts in X11 mode. Opt out with
+  `NOAH_OZONE_PLATFORM=wayland`.
+- Ollama is not bundled. The app tells you if it can't find it on port 11434.
+
 ## Without containers
 
 ```bash

@@ -64,3 +64,34 @@ def test_no_expert_called_gives_no_match(experts, monkeypatch):
     monkeypatch.setattr(httpx, "post", fake_post(content="I cannot help with that"))
     orch = Orchestrator(experts, LLMToolsEngine(model="m"), make_extractor("rule"))
     assert asyncio.run(orch.ask("tell me a joke"))[0].expert == "no_match"
+
+
+def test_launch_token_guard(monkeypatch):
+    """Desktop mode: no token or wrong Host header -> 401; right cookie + loopback Host -> 200."""
+    from fastapi.testclient import TestClient
+
+    from noah import server
+
+    monkeypatch.setattr(server, "LAUNCH_TOKEN", "s3cret")
+    c = TestClient(server.app, base_url="http://127.0.0.1:8765")
+    assert c.get("/api/config").status_code == 401
+    assert c.get("/api/config", cookies={"noah_token": "wrong"}).status_code == 401
+    assert c.get("/api/config", cookies={"noah_token": "s3cret"}).status_code == 200
+    assert c.get("/", cookies={"noah_token": "s3cret"}).status_code == 200
+    evil = TestClient(server.app, base_url="http://evil.example:8765")  # DNS-rebinding style Host
+    assert evil.get("/api/config", cookies={"noah_token": "s3cret"}).status_code == 401
+    assert TestClient(server.app, base_url="http://127.0.0.1:8765").get(
+        "/api/config", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+
+
+def test_pid_alive_posix():
+    import os
+    import subprocess
+    import sys
+
+    from noah.server import _pid_alive
+
+    assert _pid_alive(os.getpid())
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    assert not _pid_alive(p.pid)  # reaped child: gone (Windows branch is exercised only on the Windows CI runner)

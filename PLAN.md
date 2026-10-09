@@ -98,3 +98,9 @@ user message
   28 labelled + 4 off-topic: embedding 28/28 & 4/4 (only after threshold 0.25 -> 0.63; before, it declined nothing),
   Nemotron 19/28 & 4/4 (median 9 s), FunctionGemma 9/28 & 3/4 (0.6 s). Router now calls the engine in a thread.
   Caveat: the Nemotron run overlapped with other GPU work (one 300 s timeout), so its latency is pessimistic.
+- Desktop (Electron 38) done on Linux: `desktop/` shell spawns the server (random port, per-launch token, Host check,
+  exits with its parent), PyInstaller sidecar (169 MB) verified end to end, AppImage 182 MB smoke-tested with a real
+  window and no leaked processes. Bugs found: ELECTRON_RUN_AS_NODE set by VS Code; Wayland+NVIDIA segfault (X11 wrapper
+  in after-pack.js); `os.kill(pid, 0)` would terminate processes on Windows (fixed with a ctypes check).
+  NOT verified: Windows and macOS builds (CI workflow written, never run), `.deb` (needs maintainer metadata),
+  first-run embedding model download inside the packaged app, installer signing.

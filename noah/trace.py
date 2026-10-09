@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -9,8 +10,8 @@ from pathlib import Path
 class TraceStore:
     """Append-only JSONL log of every routing decision and expert result."""
 
-    def __init__(self, path: str | Path = "traces/traces.jsonl"):
-        self.path = Path(path)
+    def __init__(self, path: str | Path | None = None):
+        self.path = Path(path or os.environ.get("NOAH_TRACES", "traces/traces.jsonl"))
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def write(self, record: dict) -> None:

@@ -5,3 +5,8 @@ __pycache__/
 traces/
 research/
 *.egg-info/
+node_modules/
+desktop/dist/
+desktop/sidecar/dist/
+desktop/sidecar/build/
+desktop/dist/
