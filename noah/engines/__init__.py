@@ -15,4 +15,12 @@ def make_engine(name: str, **kwargs) -> DecisionEngine:
         from .llm_tools import LLMToolsEngine
 
         return LLMToolsEngine(**kwargs)
+    if name == "llm_choice":
+        from .llm_choice import LLMChoiceEngine
+
+        return LLMChoiceEngine(**kwargs)
+    if name == "laya":
+        from .laya import LayaEngine
+
+        return LayaEngine(**kwargs)
     raise ValueError(f"unknown decision engine: {name}")

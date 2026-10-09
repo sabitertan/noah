@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import importlib.util
 import json
 import os
 from dataclasses import asdict
@@ -13,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .engines import make_engine
+from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
 from .orchestrator import Orchestrator
 from .registry import load_experts
@@ -89,7 +91,16 @@ DEFAULT_PROFILES = [
     # Pull first:  ollama pull hf.co/ggml-org/functiongemma-270m-it-GGUF:Q8_0   (300 MB; needs fine-tuning to be reliable)
     {"name": "FunctionGemma router", "engine": "llm_tools", "mode": "route", "extractor": "rule", "model": "",
      "engine_model": "hf.co/ggml-org/functiongemma-270m-it-GGUF:Q8_0", "threshold": 0.25},
+    # Decision models: pick one expert (or 'none') from lettered options; the extractor then fills the arguments.
+    # Pull first:  ollama pull hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0   (800 MB)
+    {"name": "Tev1 decision", "engine": "llm_choice", "mode": "route", "extractor": "openai_compat",
+     "model": "qwen2.5:0.5b", "engine_model": "hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0", "threshold": 0.5},
 ]
+HAS_LAYA = importlib.util.find_spec("laya") is not None  # optional extra: pip install -e ".[laya]"
+if HAS_LAYA:
+    # Zero-shot Laya puts most mass on "none", so a low threshold; bench: english 20/28 routed, 4/4 declined at 0.1.
+    DEFAULT_PROFILES.append({"name": "Laya decision", "engine": "laya", "mode": "route", "extractor": "openai_compat",
+                             "model": "qwen2.5:0.5b", "engine_model": "english", "threshold": 0.1})
 experts = load_experts(os.environ.get("NOAH_EXPERTS", "experts"))
 trace = TraceStore()
 _engines: dict[str, object] = {}  # engines can be expensive to load (embedding), so cache them
@@ -122,7 +133,8 @@ def config():
     except Exception:
         models = []
     return {
-        "engines": ["keyword", "embedding", "llm_tools"],
+        "engines": ["keyword", "embedding", "llm_tools", "llm_choice", *(["laya"] if HAS_LAYA else [])],
+        "engine_models": {"laya": LAYA_CHECKPOINTS},  # engines whose models are not Ollama models
         "modes": ["route", "fanout"],
         "extractors": ["rule", "openai_compat"],
         "models": models,
@@ -136,7 +148,10 @@ def config():
 async def ask(req: AskRequest):
     key = f"{req.engine}:{req.engine_model}"
     if key not in _engines:
-        kw = {"base_url": f"{OLLAMA}/v1", "model": req.engine_model} if req.engine == "llm_tools" else {}
+        if req.engine in ("llm_tools", "llm_choice"):
+            kw = {"base_url": f"{OLLAMA}/v1", "model": req.engine_model}
+        else:
+            kw = {"model": req.engine_model} if req.engine == "laya" else {}
         _engines[key] = make_engine(req.engine, **kw)
     kw = {"base_url": f"{OLLAMA}/v1", "model": req.model} if req.extractor == "openai_compat" else {}
     orch = Orchestrator(experts, _engines[key], make_extractor(req.extractor, **kw), trace,

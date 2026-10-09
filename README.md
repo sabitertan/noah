@@ -100,7 +100,7 @@ python -m noah.cli ask "calculate 15% of 240" --engine embedding
 
 | Slot | Choices today | Add your own |
 |---|---|---|
-| Decision engine | `keyword`, `embedding`, `llm_tools` | implement `DecisionEngine` in `noah/engines/` |
+| Decision engine | `keyword`, `embedding`, `llm_tools`, `llm_choice`, `laya` (optional) | implement `DecisionEngine` in `noah/engines/` |
 | Orchestrator | `route` (best expert), `fanout` (several) | `noah/orchestrator.py` |
 | Argument extractor | `rule`, `openai_compat` (any small model, schema-constrained JSON) | `noah/extractors/` |
 
@@ -129,6 +129,33 @@ Read this as: the zero-shot LLM orchestrators are examples, not recommendations.
 often answers directly instead of calling an expert, and is slow on a small GPU. FunctionGemma is meant to be
 fine-tuned (the traces are the data for that). The embedding engine wins on this small, easy test set, but its
 off-topic margin is thin (0.61 vs 0.65), so re-tune the threshold when you add experts.
+
+## Decision models (Tev1, Laya)
+
+Decision models answer one question about a state: here, "which tool should handle this request?", with the
+experts plus `none` as options. They only pick the expert; the profile's extractor then fills the arguments.
+
+- `llm_choice`: letter-choice models served by Ollama, such as Together AI's
+  [Tev1](https://huggingface.co/togethercomputer/Tev1-0.8B-experimental). Options are sent as `{state, question,
+  options}` JSON, and each expert's score is its probability from the answer token's logprobs. Each option includes
+  its expert's first three manifest examples. With descriptions only, Tev1 routed 24/28.
+  `ollama pull hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0` (800 MB), then use the "Tev1 decision" profile.
+- `laya`: [Laya](https://huggingface.co/convaiinnovations/laya), a non-generative classifier that returns calibrated
+  probabilities. It needs torch + transformers, so it's an optional extra: `pip install -e ".[laya]"`. It isn't in
+  the container image or the desktop build. The engine and its "Laya decision" profile show up only when it's
+  installed. The checkpoint (`auto`, `english`, `multilingual`) is the profile's orchestrator model; the first
+  use downloads it (about 1.7 GB).
+
+Same benchmark (`python scripts/bench_orchestrators.py llm_choice:<model> laya:english`), CPU only:
+
+| Orchestrator | Routes correctly | Declines off-topic | Time per decision |
+|---|---|---|---|
+| Tev1-0.8B Q8_0 (`llm_choice`, threshold 0.5) | 28/28 | 4/4 | median 0.4 s |
+| Laya English (`laya`, threshold 0.1) | 20/28 | 4/4 | median 0.45 s |
+
+Zero-shot Laya usually ranks the right expert first (24/28) but puts most of the probability on `none`, which is why
+its threshold is low. Adding examples to its options made it worse (8/28): Laya's options share a fixed token budget.
+Laya is meant to be fine-tuned, and Noah's traces can serve as the training data.
 Check each model's license before use: a third-party listing says Nemotron-Orchestrator-8B is research-only, and
 FunctionGemma is under the Gemma terms.
 

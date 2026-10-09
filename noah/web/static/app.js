@@ -127,6 +127,8 @@ async function send() {
 }
 
 /* ---------- orchestrators ---------- */
+const MODEL_ENGINES = ['llm_tools', 'llm_choice', 'laya'];  // engines that take an engine_model
+const engineModels = (engine, cur) => (cfg.engine_models || {})[engine] || (cfg.models.length ? cfg.models : [cur || '']);
 async function saveProfiles() { await fetch('/api/profiles', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(profiles) }); }
 function renderOrch() {
   if (editing === null || !profiles[editing]) editing = Math.max(0, profiles.findIndex(p => p.name === activeProfile));
@@ -134,19 +136,20 @@ function renderOrch() {
   const opts = (items, v) => items.map(i => `<option ${i === v ? 'selected' : ''}>${esc(i)}</option>`).join('');
   $('orchPanel').innerHTML = `<h2>Orchestrators</h2><p class="lede">An orchestrator is a saved combination of decision engine, orchestration mode and argument extractor. Create as many as you like.</p>
     <div class="cards">${profiles.map((x, i) => `<div class="card ${i === editing ? 'sel' : ''}" data-edit="${i}"><h3>${svg('cpu')}${esc(x.name)}${x.name === activeProfile ? '<span class="badge">active</span>' : ''}</h3>
-      <p>${esc(x.engine)}${x.engine === 'llm_tools' ? ' (' + esc(shortModel(x.engine_model)) + ')' : ''} → ${esc(x.mode)} → ${x.engine === 'llm_tools' ? 'model args' : esc(x.extractor) + (x.extractor === 'openai_compat' ? ' (' + esc(x.model) + ')' : '')}</p></div>`).join('')}
+      <p>${esc(x.engine)}${MODEL_ENGINES.includes(x.engine) ? ' (' + esc(shortModel(x.engine_model)) + ')' : ''} → ${esc(x.mode)} → ${x.engine === 'llm_tools' ? 'model args' : esc(x.extractor) + (x.extractor === 'openai_compat' ? ' (' + esc(x.model) + ')' : '')}</p></div>`).join('')}
       <div class="card" data-new style="cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)">${svg('plus')}&nbsp;New orchestrator</div></div>
     <div class="form">
       <label>Name</label><input id="f-name" value="${esc(p.name)}">
       <label>Decision engine</label><select id="f-engine">${opts(cfg.engines, p.engine)}</select>
-      <label id="l-em" ${p.engine === 'llm_tools' ? '' : 'hidden'}>Orchestrator model</label><select id="f-em" ${p.engine === 'llm_tools' ? '' : 'hidden'}>${opts(cfg.models.length ? cfg.models : [p.engine_model || ''], p.engine_model || '')}</select>
+      <label id="l-em" ${MODEL_ENGINES.includes(p.engine) ? '' : 'hidden'}>Orchestrator model</label><select id="f-em" ${MODEL_ENGINES.includes(p.engine) ? '' : 'hidden'}>${opts(engineModels(p.engine, p.engine_model), p.engine_model || '')}</select>
       <label>Orchestration</label><select id="f-mode">${opts(cfg.modes, p.mode)}</select>
       <label>Argument extractor</label><select id="f-extractor">${opts(cfg.extractors, p.extractor)}</select>
       <label>Tiny model</label><select id="f-model" ${p.extractor === 'openai_compat' ? '' : 'disabled'}><option value="" ${p.model ? '' : 'selected'}>—</option>${opts(cfg.models.length ? cfg.models : [p.model], p.model)}</select>
       <label>Threshold <span id="f-thv">${p.threshold}</span></label><input type="range" id="f-threshold" min="0" max="1" step="0.05" value="${p.threshold}">
     </div>
     <div class="actions"><button class="btn primary" id="f-save">Save</button><button class="btn" id="f-use">Use in chat</button><button class="btn danger" id="f-del" ${profiles.length < 2 ? 'disabled' : ''}>Delete</button></div>`;
-  $('f-engine').onchange = () => { const on = $('f-engine').value === 'llm_tools'; $('l-em').hidden = $('f-em').hidden = !on; };
+  $('f-engine').onchange = () => { const e = $('f-engine').value; $('l-em').hidden = $('f-em').hidden = !MODEL_ENGINES.includes(e);
+    $('f-em').innerHTML = opts(engineModels(e, p.engine_model), p.engine_model || ''); };
   $('f-extractor').onchange = () => { $('f-model').disabled = $('f-extractor').value !== 'openai_compat'; };
   $('f-threshold').oninput = () => { $('f-thv').textContent = $('f-threshold').value; };
   const collect = () => { const old = p.name; Object.assign(p, { name: $('f-name').value.trim() || old, engine: $('f-engine').value, mode: $('f-mode').value,
@@ -170,7 +173,7 @@ function renderExperts() {
 function renderModels() {
   const norm = m => { m = String(m || ''); return m && !m.split('/').pop().includes(':') ? m + ':latest' : m; };  // "x" == "x:latest"
   const orchestrators = m => profiles.flatMap(p => [
-    ...(p.engine === 'llm_tools' && norm(p.engine_model) === norm(m) ? [`${p.name} (orchestrator)`] : []),
+    ...(['llm_tools', 'llm_choice'].includes(p.engine) && norm(p.engine_model) === norm(m) ? [`${p.name} (orchestrator)`] : []),
     ...(p.engine !== 'llm_tools' && p.extractor === 'openai_compat' && norm(p.model) === norm(m) ? [`${p.name} (extractor)`] : []),
   ]);
   const experts = m => cfg.experts.filter(e => e.kind === 'generate' && norm(e.model) === norm(m)).map(e => e.name);

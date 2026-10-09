@@ -18,6 +18,7 @@ def main() -> None:
     ask = sub.add_parser("ask")
     ask.add_argument("message")
     ask.add_argument("--engine", default="keyword")
+    ask.add_argument("--engine-model", default="", help="llm_tools/llm_choice: Ollama model; laya: checkpoint")
     ask.add_argument("--extractor", default="rule")
     ask.add_argument("--mode", default="route", choices=["route", "fanout"])
     ask.add_argument("--threshold", type=float, default=0.25)
@@ -35,8 +36,12 @@ def main() -> None:
         for r in TraceStore().read():
             print(json.dumps(r))
     else:
+        if a.engine in ("llm_tools", "llm_choice"):
+            ekw = {"base_url": a.base_url, "model": a.engine_model}
+        else:
+            ekw = {"model": a.engine_model} if a.engine == "laya" else {}
         kw = {"base_url": a.base_url, "model": a.model} if a.extractor == "openai_compat" else {}
-        orch = Orchestrator(experts, make_engine(a.engine), make_extractor(a.extractor, **kw), TraceStore(),
+        orch = Orchestrator(experts, make_engine(a.engine, **ekw), make_extractor(a.extractor, **kw), TraceStore(),
                             mode=a.mode, threshold=a.threshold)
         for r in asyncio.run(orch.ask(a.message)):
             print(f"[{r.expert} via {r.extractor}, {r.latency_ms:.0f} ms] args={r.args}\n{r.output}")

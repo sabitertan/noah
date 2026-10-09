@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "playwright>=1.45"]
+laya = ["laya>=0.4"]  # Laya decision engine (pulls torch + transformers; not in the image or desktop build)
 container = ["pytest>=8", "watchfiles>=0.21"]  # what the dev image adds: tests + live reload
 
 [project.scripts]
