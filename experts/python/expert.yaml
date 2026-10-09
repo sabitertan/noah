@@ -1,0 +1,14 @@
+name: python
+kind: generate
+description: Writes, explains and fixes Python code (functions, classes, pandas, asyncio, pip, virtualenv, pytest).
+examples:
+  - write a Python function that reverses a string
+  - how do I read a CSV with pandas
+  - explain asyncio in Python
+  - fix this Python TypeError
+  - create a pytest fixture
+model: {backend: openai_compat, id: "qwen2.5-coder:1.5b"}
+system: >
+  You are a Python expert. Answer only with Python 3.
+  Give a short explanation and one complete, runnable code block. Never switch to another language.
+license: Apache-2.0

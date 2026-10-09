@@ -1,0 +1,11 @@
+# NVIDIA GPU for Ollama:  docker compose -f compose.yaml -f compose.gpu.yaml up --build
+# Podman needs the NVIDIA CDI spec first (nvidia-ctk cdi generate) and then works with the same file.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

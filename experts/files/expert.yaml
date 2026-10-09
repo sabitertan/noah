@@ -1,0 +1,14 @@
+name: files
+description: Searches and lists documents in the user's files folder, like a cloud drive.
+examples:
+  - find my invoice file
+  - list the documents in my drive
+  - search my files for the budget spreadsheet
+  - do I have a file about taxes
+parameters:
+  type: object
+  properties:
+    query: {type: string, description: File name or keyword to search for}
+  required: [query]
+model: {backend: rule}
+license: MIT

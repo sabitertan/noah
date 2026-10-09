@@ -1,0 +1,14 @@
+name: calc
+description: Evaluates arithmetic expressions and does math calculations.
+examples:
+  - what is 12 * (3 + 4)
+  - calculate 15% of 240
+  - compute 2 to the power of 10
+  - how much is 99 divided by 3
+parameters:
+  type: object
+  properties:
+    expression: {type: string, description: Arithmetic expression}
+  required: [expression]
+model: {backend: rule}
+license: MIT

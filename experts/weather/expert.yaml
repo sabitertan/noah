@@ -1,0 +1,14 @@
+name: weather
+description: Current weather and temperature for a city, from the public Open-Meteo API.
+examples:
+  - what's the weather in Paris
+  - how hot is it in Tokyo today
+  - is it raining in London
+  - temperature forecast for Berlin
+parameters:
+  type: object
+  properties:
+    city: {type: string, description: City name}
+  required: [city]
+model: {backend: rule}
+license: MIT

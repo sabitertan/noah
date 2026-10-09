@@ -1,0 +1,54 @@
+# Docker:  docker compose up --build
+# Podman:  podman compose up --build      (or: podman-compose up --build)
+# Then open http://localhost:8765
+# Podman-only hint (Docker ignores x- keys): no shared pod, so each container gets the keep-id user mapping.
+x-podman:
+  in_pod: false
+
+services:
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    # Not published on purpose: a host Ollama on :11434 keeps working. Uncomment to reach it from the host.
+    # ports: ["11434:11434"]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot job: pulls the tiny models the default experts use, then exits.
+  models:
+    image: docker.io/ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["for m in $${NOAH_MODELS:-qwen2.5:0.5b qwen2.5-coder:1.5b}; do ollama pull $$m; done"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      NOAH_MODELS: ${NOAH_MODELS:-qwen2.5:0.5b qwen2.5-coder:1.5b}
+    restart: "no"
+
+  noah:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - "8765:8765"
+    environment:
+      NOAH_LLM_URL: http://ollama:11434
+    # Live-edit: code, experts and data are mounted, uvicorn reloads on change.
+    volumes:
+      - ./noah:/app/noah:z
+      - ./experts:/app/experts:z
+      - ./data:/app/data:z
+      - ./traces:/app/traces:z
+    command: ["uvicorn", "noah.server:app", "--host", "0.0.0.0", "--port", "8765", "--reload",
+              "--reload-dir", "/app/noah", "--reload-dir", "/app/experts",
+              "--reload-include", "*.yaml"]
+
+volumes:
+  ollama:

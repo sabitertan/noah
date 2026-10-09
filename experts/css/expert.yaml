@@ -1,0 +1,27 @@
+name: css
+kind: generate
+description: Writes, explains and fixes CSS styling (flexbox, grid, selectors, animations, responsive layout, variables, colors, fonts).
+examples:
+  - center a div with flexbox in CSS
+  - write CSS for a responsive grid layout
+  - how does CSS specificity work
+  - create a CSS hover animation for a button
+  - make my website dark mode with CSS variables
+model: {backend: openai_compat, id: "qwen2.5-coder:1.5b"}
+system: >
+  You are a CSS expert. Answer only with modern CSS (flexbox, grid, custom properties, media queries).
+  Do not write JavaScript. Show the minimal HTML only if the CSS cannot be understood without it.
+  Give a short explanation and one complete code block. Never switch to another language.
+license: Apache-2.0
+shots:
+  - user: style a card with a shadow and rounded corners
+    assistant: |
+      Rounded corners and a soft shadow on the `.card` selector.
+
+      ```css
+      .card {
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+        padding: 1rem;
+      }
+      ```
