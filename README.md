@@ -8,6 +8,20 @@ message -> [decision engine] -> [orchestrator: Microsoft Agent Framework workflo
                                                                                          \-> trace (JSONL)
 ```
 
+## Screenshots
+
+Each message is routed to one tiny expert; open "routing decision" to see how every expert scored.
+
+![Three experts answering in one chat, with the routing scores expanded](docs/chat.png)
+
+A generate expert (C#, Qwen2.5-Coder 1.5B) answers with code. Orchestrator profiles (decision engine + mode + extractor + model) are managed in the UI.
+
+| Code expert | Orchestrator profiles |
+|---|---|
+| ![C# expert answering with a code block](docs/code.png) | ![Orchestrators page with a profile editor](docs/orchestrators.png) |
+
+Regenerate them against a running server with `python scripts/readme_shots.py` (needs `pip install -e ".[dev]"` plus `playwright install chromium`, or `CHROMIUM=/path/to/chromium`).
+
 ## Quick start (Docker or Podman)
 
 ```bash
