@@ -45,6 +45,13 @@ PODMAN_USERNS=keep-id podman compose up --build # Podman (rootless: keep-id make
 
 NVIDIA GPU for Ollama: `make up GPU=1` (Podman also needs the CDI spec: `nvidia-ctk cdi generate`).
 
+Windows (Podman Desktop / `podman machine`): there is no `make`, so use `podman compose up --build`. Run
+`podman machine start` first. The WSL machine is rootful, so leave out `PODMAN_USERNS=keep-id`. If the build fails at
+`pip install` with "Network is unreachable", or models time out on "pulling manifest", the machine's container
+networking is broken. Try `podman machine stop` then `podman machine start`. If that doesn't help, build with
+`podman build --network=host -t noah_noah .` and run both containers with `--network=host` (Noah with
+`-e NOAH_LLM_URL=http://localhost:11434`).
+
 Code, `experts/`, `data/` and `traces/` are bind-mounted, so edits reload live and traces survive restarts.
 Ollama is not published to the host, so a host Ollama on port 11434 keeps working.
 
@@ -67,16 +74,20 @@ npm run dist                       # installer in desktop/dist/ (AppImage on Lin
 - PyInstaller and Electron don't cross-compile. `.github/workflows/desktop.yml` builds all three OSes on real runners
   (Actions tab > "Desktop builds" > Run workflow); download the installers from the run's Artifacts.
 - Installed apps keep editable experts, profiles, traces and models in the OS user-data folder
-  (Linux: `~/.config/noah-desktop`), seeded on first run. The first embedding-engine use downloads about 70 MB.
+  (Linux: `~/.config/noah-desktop`, Windows: `%APPDATA%\noah-desktop`), seeded on first run. The first embedding-engine use downloads about 70 MB.
 - Builds are unsigned: expect a Windows SmartScreen or macOS Gatekeeper warning.
 - Linux on Wayland + NVIDIA: Electron's native Wayland path crashed here, so Linux starts in X11 mode. Opt out with
   `NOAH_OZONE_PLATFORM=wayland`.
 - Ollama is not bundled. The app tells you if it can't find it on port 11434.
+- Windows: run the build from the project venv (`.venv\Scripts\activate`, then `pip install -e . pyinstaller`).
+  PyInstaller warns that it can't collect `onnxruntime.quantization`; this is harmless. VS Code's terminal sets
+  `ELECTRON_RUN_AS_NODE=1`, so starting `dist\win-unpacked\Noah.exe` from it fails with "bad option". Use
+  `npm start` (it clears the variable), launch the app from Explorer, or run `Remove-Item Env:ELECTRON_RUN_AS_NODE` first.
 
 ## Without containers
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
+python3 -m venv .venv && . .venv/bin/activate    # Windows: python -m venv .venv; .venv\Scripts\activate
 pip install -e ".[dev]"
 ollama serve &                                   # any OpenAI-compatible server works
 ollama pull qwen2.5:0.5b && ollama pull qwen2.5-coder:1.5b
