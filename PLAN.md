@@ -131,3 +131,10 @@ user message
   component edit and applied a CSS edit live; Docker UI stage built with Podman; 55 Python tests. NOT verified: the full Docker image, Windows/macOS CI, Electron
   window with the new bundle (the frozen server serves it, so it should work). Trade-off: a source checkout now needs one `npm run build` (Node), where before it needed none.
 - Vite is the dev entry (2026-10-13): `make dev` adds a `ui` service (node:22, bind-mounted frontend, polling) at :5173 proxying to the API container; `make dev-host` runs API+Vite on the host. Verified HMR (component + CSS edit, typed text kept) through the container service with a bind mount. `make dev-host` itself not run (port 8765 was in use); full `make dev` compose not run.
+- Hugging Face models (2026-10-13): any model slot can be local (Ollama) or hosted on Hugging Face (`hf:org/name` -> Inference Providers router with the
+  user's token, no download); the Models page labels each model's origin, searches HF (hosted list + GGUF repos), adds hosted models, and downloads a GGUF into
+  Ollama with quant sizes and progress. New `noah/llm.py` (one `chat()` used by generate, both LLM engines and the extractor; plain-language HF errors, token
+  never in messages), `noah/hf.py` (token, search, quants, pull, my models, test). Orchestrator model dropdowns grouped Local / Hugging Face. 26 new tests
+  (network faked), plus a browser run against a stub standing in for Ollama + HF router + hub (token, hosted add/test, download with progress, dropdown groups,
+  a chat answered through a hosted extractor, disconnect). Real HF endpoints verified unauthenticated only (model list, GGUF search, quants, token rejection).
+  NOT verified: any real inference call (no token here), real Ollama pull of an HF repo, provider differences (tools/structured output/logprobs), Windows/macOS.

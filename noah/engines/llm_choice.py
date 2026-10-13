@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import math
 
-import httpx
-
+from ..llm import chat
 from ..types import Decision, Expert
 
 QUESTION = "Which tool should handle this request?"
@@ -61,12 +60,11 @@ class LLMChoiceEngine:
     def decide(self, message: str, experts: dict[str, Expert]) -> list[Decision]:
         record = decision_record(message, experts)
         labels = {o["label"]: o["key"] for o in record["options"]}
-        r = httpx.post(f"{self.base_url}/chat/completions", timeout=self.timeout, json={
+        reply = chat(self.base_url, {
             "model": self.model, "temperature": 0, "max_tokens": 8, "logprobs": True, "top_logprobs": 20,
             "reasoning_effort": "none",  # Qwen3.5-based: skip the thinking block, answer with the letter
             "messages": [{"role": "system", "content": SYSTEM},
-                         {"role": "user", "content": json.dumps(record, ensure_ascii=False)}]})
-        r.raise_for_status()
-        probs = option_probabilities(r.json()["choices"][0], labels)
+                         {"role": "user", "content": json.dumps(record, ensure_ascii=False)}]}, self.timeout)
+        probs = option_probabilities(reply["choices"][0], labels)
         out = [Decision(n, round(probs.get(n, 0.0), 4)) for n in experts]
         return sorted(out, key=lambda d: d.score, reverse=True)

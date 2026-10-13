@@ -24,6 +24,7 @@ export const enabledProfiles = computed(() => profiles.value.filter(isOn));
 export const current = computed(() => enabledProfiles.value.find(p => p.name === activeProfile.value) || enabledProfiles.value[0]);  // never a disabled one
 export const chatObj = computed(() => chats.value.find(c => c.id === currentChat.value));
 export const messages = computed(() => chatObj.value?.messages || []);
+export const hostedModels = computed(() => cfg.value.hf_models || []);  // 'hf:org/name' ids the user added
 export const enabledExpertCount = computed(() => cfg.value.experts.filter(e => e.enabled).length);
 
 /* ---------- routing: the URL hash is the route (#/orch, #/chat/<id>) so refresh, back/forward and deep links work ---------- */
@@ -88,6 +89,8 @@ export async function sendMessage(text) {
   delete m.pending; busy.value = false;
   return true;
 }
+
+export const refreshConfig = async () => { cfg.value = await getJson('/api/config'); };
 
 export async function init() {
   applyRoute();

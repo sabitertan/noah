@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-import httpx
+from .llm import chat
 
 
 def generate(base_url: str, model: str, system: str, message: str, timeout: float = 180.0,
@@ -13,7 +13,5 @@ def generate(base_url: str, model: str, system: str, message: str, timeout: floa
         *[m for sh in (shots or []) for m in ({"role": "user", "content": sh["user"]},
                                               {"role": "assistant", "content": sh["assistant"]})],
         {"role": "user", "content": message}]}
-    r = httpx.post(f"{base_url.rstrip('/')}/chat/completions", json=body, timeout=timeout)
-    r.raise_for_status()
-    text = r.json()["choices"][0]["message"]["content"] or ""
+    text = chat(base_url, body, timeout)["choices"][0]["message"]["content"] or ""
     return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()

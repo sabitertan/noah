@@ -5,7 +5,8 @@
     "mode": "route",
     "extractor": "openai_compat",
     "model": "qwen2.5:0.5b",
-    "threshold": 0.63
+    "threshold": 0.63,
+    "engine_model": ""
   },
   {
     "name": "Nemotron orchestrator",
@@ -35,7 +36,7 @@
     "model": "qwen2.5:0.5b",
     "engine_model": "hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0",
     "threshold": 0.5,
-    "enabled": false
+    "enabled": true
   },
   {
     "name": "Smol",

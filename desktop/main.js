@@ -58,6 +58,7 @@ async function startServer() {
     if (!fs.existsSync(files)) fs.cpSync(path.join(process.resourcesPath, 'sample-files'), files, { recursive: true });
     packagedEnv = { NOAH_EXPERTS: experts, NOAH_PROFILES: path.join(data, 'profiles.json'),
       NOAH_TRACES: path.join(data, 'traces.jsonl'), NOAH_FILES_DIR: files,
+      NOAH_HF_TOKEN_FILE: path.join(data, 'hf_token'), NOAH_HF_MODELS: path.join(data, 'hf_models.json'),
       FASTEMBED_CACHE_PATH: path.join(app.getPath('userData'), 'models') };
   }
   server = spawn(cmd, args, {

@@ -40,6 +40,7 @@ services:
       - "8765:8765"
     environment:
       NOAH_LLM_URL: http://ollama:11434
+      HF_TOKEN: ${HF_TOKEN:-}      # optional: use Hugging Face hosted models without typing the token in the UI
     # Persisted state. For live-editing code, use the dev override:  make dev
     volumes:
       - ./data:/app/data:z

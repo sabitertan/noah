@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import re
 
-import httpx
-
+from ..llm import chat
 from ..types import Decision, Expert
 
 NONE_TOOL = "none"
@@ -52,11 +51,9 @@ class LLMToolsEngine:
         self.name = "llm_tools"
 
     def _calls(self, message: str, experts: dict[str, Expert]) -> list[tuple[str, dict]]:
-        r = httpx.post(f"{self.base_url}/chat/completions", timeout=self.timeout, json={
+        msg = chat(self.base_url, {
             "model": self.model, "temperature": 0, "tools": expert_tools(experts),
-            "messages": [{"role": "user", "content": message}]})
-        r.raise_for_status()
-        msg = r.json()["choices"][0]["message"]
+            "messages": [{"role": "user", "content": message}]}, self.timeout)["choices"][0]["message"]
         native = [(c["function"]["name"], c["function"]["arguments"]) for c in msg.get("tool_calls") or []]
         if native:
             return [(n, json.loads(a) if isinstance(a, str) else (a or {})) for n, a in native]

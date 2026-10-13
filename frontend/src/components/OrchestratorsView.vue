@@ -4,12 +4,11 @@
 import { ref, computed } from 'vue';
 import UiIcon from './UiIcon.vue';
 import { send } from '../lib/api.js';
-import { shortModel } from '../lib/format.js';
-import { MODEL_ENGINES, cfg, profiles, enabledProfiles, current, activeProfile, isOn, saveProfiles, go } from '../store.js';
+import { shortModel, isHosted } from '../lib/format.js';
+import { MODEL_ENGINES, cfg, hostedModels, profiles, enabledProfiles, current, activeProfile, isOn, saveProfiles, go } from '../store.js';
 
 const FIELDS = ['name', 'engine', 'engine_model', 'mode', 'extractor', 'model', 'threshold'];  // what the editor changes ('enabled' belongs to the switch)
 const pick = p => Object.fromEntries(FIELDS.map(f => [f, p[f] ?? (f === 'threshold' ? 0.25 : '')]));
-const withCurrent = (list, cur) => cur && !list.includes(cur) ? [cur, ...list] : list;  // never hide a saved value that is not in the list
 
 const editing = ref(Math.max(0, profiles.value.findIndex(p => p.name === activeProfile.value)));
 const draft = ref(null), note = ref('');
@@ -21,13 +20,23 @@ const dirty = computed(() => !!(saved.value && draft.value && FIELDS.some(f => d
 const takesModel = computed(() => !!draft.value && MODEL_ENGINES.includes(draft.value.engine));
 const editingOn = computed(() => !!saved.value && isOn(saved.value));
 const canDelete = computed(() => profiles.value.length > 1 && !(editingOn.value && enabledProfiles.value.length < 2));
-const message = computed(() => note.value || (saved.value && !isOn(saved.value) ? 'This orchestrator is disabled: it is hidden from the chat picker and the server refuses to use it.' : ''));
+const message = computed(() => note.value || (saved.value && !isOn(saved.value) ? 'This orchestrator is disabled: it is hidden from the chat picker and the server refuses to use it.' : '')
+  || (needsToken.value ? 'This orchestrator uses a Hugging Face hosted model. Add your token on the Models page first.' : ''));
 
-const engineModelList = engine => (cfg.value.engine_models || {})[engine] || cfg.value.models;
+// Model choices, grouped by where they run. A saved value that is in no list stays visible instead of being swapped silently.
+function modelGroups(engine, cur) {
+  const own = (cfg.value.engine_models || {})[engine];
+  const groups = own ? [{ label: 'Models', models: own }]
+    : [{ label: 'Local (Ollama)', models: cfg.value.models }, { label: 'Hugging Face (hosted, no download)', models: hostedModels.value }];
+  if (cur && !groups.some(g => g.models.includes(cur))) groups.unshift({ label: 'Current', models: [cur] });
+  return groups.filter(g => g.models.length);
+}
+const engineModelList = engine => modelGroups(engine, '').flatMap(g => g.models);
+const needsToken = computed(() => !cfg.value.hf.configured && !!draft.value && [draft.value.engine_model, draft.value.model].some(isHosted));
 const select = i => { editing.value = i; loadDraft(); };
 const shown = (x, i) => i === editing.value && draft.value ? draft.value : x;
 const summary = p => `${p.engine}${MODEL_ENGINES.includes(p.engine) ? ' (' + shortModel(p.engine_model) + ')' : ''} → ${p.mode} → ` +
-  (p.engine === 'llm_tools' ? 'model args' : p.extractor + (p.extractor === 'openai_compat' ? ' (' + p.model + ')' : ''));
+  (p.engine === 'llm_tools' ? 'model args' : p.extractor + (p.extractor === 'openai_compat' ? ' (' + shortModel(p.model) + ')' : ''));
 
 function onEngine() {  // switching engine: keep the model only if this engine offers it
   const list = engineModelList(draft.value.engine);
@@ -77,10 +86,10 @@ async function toggle(x, ev) {
     <div class="form" v-if="draft">
       <label>Name</label><input id="f-name" v-model="draft.name">
       <label>Decision engine</label><select id="f-engine" v-model="draft.engine" @change="onEngine"><option v-for="e in cfg.engines" :key="e">{{ e }}</option></select>
-      <label v-show="takesModel">Orchestrator model</label><select id="f-em" v-show="takesModel" v-model="draft.engine_model"><option v-for="m in withCurrent(engineModelList(draft.engine), draft.engine_model)" :key="m">{{ m }}</option></select>
+      <label v-show="takesModel">Orchestrator model</label><select id="f-em" v-show="takesModel" v-model="draft.engine_model"><optgroup v-for="g in modelGroups(draft.engine, draft.engine_model)" :key="g.label" :label="g.label"><option v-for="m in g.models" :key="m">{{ m }}</option></optgroup></select>
       <label>Orchestration</label><select id="f-mode" v-model="draft.mode"><option v-for="m in cfg.modes" :key="m">{{ m }}</option></select>
       <label>Argument extractor</label><select id="f-extractor" v-model="draft.extractor"><option v-for="e in cfg.extractors" :key="e">{{ e }}</option></select>
-      <label>Tiny model</label><select id="f-model" v-model="draft.model" :disabled="draft.extractor !== 'openai_compat'"><option value="">—</option><option v-for="m in withCurrent(cfg.models, draft.model)" :key="m">{{ m }}</option></select>
+      <label>Tiny model</label><select id="f-model" v-model="draft.model" :disabled="draft.extractor !== 'openai_compat'"><option value="">—</option><optgroup v-for="g in modelGroups('openai_compat', draft.model)" :key="g.label" :label="g.label"><option v-for="m in g.models" :key="m">{{ m }}</option></optgroup></select>
       <label>Threshold <span id="f-thv">{{ draft.threshold }}</span></label><input type="range" id="f-threshold" min="0" max="1" step="0.05" v-model.number="draft.threshold">
     </div>
     <div class="actions" v-if="draft">

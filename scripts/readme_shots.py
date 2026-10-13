@@ -35,4 +35,20 @@ with sync_playwright() as p:
 
     pg.click("[data-view=orch]"); pg.wait_for_timeout(400)
     pg.screenshot(path="docs/orchestrators.png")
+
+    # Hugging Face: local and hosted models side by side, then a GGUF download with its quantisations (nothing is downloaded)
+    hf = b.new_page(viewport={"width": 1280, "height": 900})
+    hf.goto(base + "/#/models"); hf.wait_for_selector("#hfHosted tbody tr")
+    hf.fill("#hf-search", "qwen"); hf.wait_for_timeout(1500); hf.wait_for_selector("#hfHosted tbody tr")
+    model = hf.locator("#hfHosted tbody tr").first.locator("td").first.inner_text()
+    hf.locator("#hfHosted tbody tr button:has-text('Use hosted')").first.click()
+    hf.wait_for_selector(f"#modelsTable tr[data-model='hf:{model}']")
+    hf.locator(f"#modelsTable tr[data-model='hf:{model}'] button:has-text('Test')").wait_for()
+    hf.evaluate("document.querySelector('#v-models').scrollTop = 0"); hf.wait_for_timeout(200)
+    hf.screenshot(path="docs/models.png")
+    hf.locator("#hfGguf button:has-text('Download…')").first.click(); hf.wait_for_selector("#hfGguf select")
+    hf.locator("#hfGguf").scroll_into_view_if_needed(); hf.evaluate("document.querySelector('#hfGguf').scrollIntoView({block: 'start'})")
+    hf.wait_for_timeout(300)
+    hf.screenshot(path="docs/huggingface.png")
+    hf.request.delete(f"{base}/api/hf/my/{model}")  # leave the server as we found it
     b.close()

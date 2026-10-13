@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import httpx
-
+from ..llm import LLMError, chat, is_hf
 from ..types import Expert
 from . import validate_args
 from .rule import RuleExtractor
@@ -30,9 +29,9 @@ class OpenAICompatExtractor:
         self.timeout = timeout
         self.fallback = RuleExtractor() if fallback else None
 
-    def extract(self, message: str, expert: Expert) -> dict[str, Any]:
+    def _body(self, mode: str, message: str, expert: Expert) -> dict[str, Any]:
         body = {"model": self.model, "temperature": 0}
-        if self.mode == "tools":
+        if mode == "tools":
             body["messages"] = [{"role": "user", "content": message}]
             body["tools"] = [{"type": "function", "function": {
                 "name": expert.name, "description": expert.description, "parameters": expert.parameters}}]
@@ -46,18 +45,29 @@ class OpenAICompatExtractor:
                 {"role": "user", "content": message}]
             body["response_format"] = {"type": "json_schema", "json_schema": {
                 "name": expert.name, "schema": expert.parameters, "strict": True}}
-        try:
-            r = httpx.post(f"{self.base_url}/chat/completions", json=body, timeout=self.timeout)
-            r.raise_for_status()
-            msg = r.json()["choices"][0]["message"]
-            if self.mode == "tools":
-                call = msg["tool_calls"][0]["function"]
-                args = json.loads(call["arguments"]) if isinstance(call["arguments"], str) else call["arguments"]
-            else:
-                args = json.loads(msg["content"])
-            validate_args(args, expert.parameters)
-            return args
-        except Exception:
-            if self.fallback is None:
-                raise
-            return self.fallback.extract(message, expert)
+        return body
+
+    def _try(self, mode: str, message: str, expert: Expert) -> dict[str, Any]:
+        msg = chat(self.base_url, self._body(mode, message, expert), self.timeout)["choices"][0]["message"]
+        if mode == "tools":
+            call = msg["tool_calls"][0]["function"]
+            args = json.loads(call["arguments"]) if isinstance(call["arguments"], str) else call["arguments"]
+        else:
+            args = json.loads(msg["content"])
+        validate_args(args, expert.parameters)
+        return args
+
+    def extract(self, message: str, expert: Expert) -> dict[str, Any]:
+        # Hosted models vary in what a provider supports (structured output vs tool calls), so try the other shape too.
+        modes = [self.mode, *(["tools" if self.mode == "schema" else "schema"] if is_hf(self.model) else [])]
+        for mode in modes:
+            try:
+                return self._try(mode, message, expert)
+            except LLMError as e:
+                if e.fatal:
+                    raise  # a bad token must be seen, not hidden behind the rule fallback
+            except Exception:
+                pass
+        if self.fallback is None:
+            raise RuntimeError(f"{self.model} returned no usable arguments")
+        return self.fallback.extract(message, expert)

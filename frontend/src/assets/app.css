@@ -153,3 +153,27 @@ th { color: var(--muted); font-weight: 400; }
 #app { display: contents; }
 .card.new { cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); }
 .card .meta { color: var(--muted); font-size: 11px; }
+
+/* models page: where a model is served from, and the Hugging Face panel */
+.where { font-size: 11px; border-radius: 6px; padding: 0 6px; border: 1px solid; white-space: nowrap; }
+.where.local { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.where.hf { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.rowact { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.btn.small { padding: 2px 10px; font-size: 12px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.hf { margin-top: 34px; }
+.hf h3 { font-size: 14px; margin: 22px 0 8px; color: var(--fg); }
+.hf h3 .meta { color: var(--muted); font-size: 11px; font-weight: 400; margin-left: 6px; }
+.hfbox { border: 1px solid color-mix(in srgb, var(--border) 60%, transparent); border-radius: 10px; background: var(--panel); padding: 10px 12px; margin-bottom: 14px; }
+.hfrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+.hfrow input { flex: 1; min-width: 220px; }
+.fnote.bad { color: var(--err); }
+.fnote.warn { color: var(--warn); margin: 6px 0 0; }
+.dl td { background: var(--panel); }
+.progress { height: 6px; background: var(--bar); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.progress i { display: block; height: 100%; background: var(--accent); transition: width .2s; }
+.tag + .tag { margin-left: 4px; }
+.btn.small { white-space: nowrap; }
+.hfrow .fnote { flex: 1 1 260px; margin: 0; }
+.hf td:last-child { text-align: right; white-space: nowrap; }
+.btn.more { margin: 8px 0 0; }

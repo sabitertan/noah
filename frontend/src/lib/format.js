@@ -12,5 +12,6 @@ export function fmt(text) {
 
 export const humanSize = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
 export const countLabel = (on, total) => on === total ? String(total) : `${on}/${total}`;  // "7", or "5/7" when some are off
-export const shortModel = m => String(m || '').replace(/^hf\.co\//, '').split('/').pop();
+export const isHosted = m => String(m || '').startsWith('hf:');  // served by Hugging Face's API, nothing downloaded
+export const shortModel = m => (isHosted(m) ? '☁ ' : '') + String(m || '').replace(/^hf:/, '').replace(/^hf\.co\//, '').split('/').pop();
 export const norm = m => { m = String(m || ''); return m && !m.split('/').pop().includes(':') ? m + ':latest' : m; };  // "x" == "x:latest"

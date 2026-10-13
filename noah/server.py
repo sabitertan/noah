@@ -17,6 +17,7 @@ from . import filesvc
 from .engines import make_engine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
+from . import hf, llm
 from .orchestrator import Orchestrator
 from .registry import load_experts
 from .trace import TraceStore
@@ -79,6 +80,7 @@ async def launch_guard(request: Request, call_next):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
     return await call_next(request)
 
+app.include_router(hf.router)
 app.mount("/assets", StaticFiles(directory=WEB / "assets", check_dir=False), name="assets")  # content-hashed JS/CSS/fonts
 PROFILES = Path(os.environ.get("NOAH_PROFILES", "data/profiles.json"))
 DEFAULT_PROFILES = [
@@ -171,6 +173,8 @@ def config(request: Request):
         "modes": ["route", "fanout"],
         "extractors": ["rule", "openai_compat"],
         "models": models,
+        "hf": hf.status(),  # whether a token is set (never the token)
+        "hf_models": [llm.HF_PREFIX + m for m in hf.my_models()],  # hosted models the user added
         "experts": [{"name": e.name, "description": e.description, "license": e.license,
                      "parameters": e.parameters, "examples": e.examples,
                      "kind": e.kind, "model": e.model.get("id", ""),
