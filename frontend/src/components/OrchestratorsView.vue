@@ -4,8 +4,8 @@
 import { ref, computed } from 'vue';
 import UiIcon from './UiIcon.vue';
 import { send } from '../lib/api.js';
-import { shortModel, isHosted } from '../lib/format.js';
-import { MODEL_ENGINES, cfg, hostedModels, profiles, enabledProfiles, current, activeProfile, isOn, saveProfiles, go } from '../store.js';
+import { shortModel, hostedKind, PROVIDERS } from '../lib/format.js';
+import { MODEL_ENGINES, cfg, profiles, enabledProfiles, current, activeProfile, isOn, saveProfiles, go } from '../store.js';
 
 const FIELDS = ['name', 'engine', 'engine_model', 'mode', 'extractor', 'model', 'threshold'];  // what the editor changes ('enabled' belongs to the switch)
 const pick = p => Object.fromEntries(FIELDS.map(f => [f, p[f] ?? (f === 'threshold' ? 0.25 : '')]));
@@ -21,18 +21,20 @@ const takesModel = computed(() => !!draft.value && MODEL_ENGINES.includes(draft.
 const editingOn = computed(() => !!saved.value && isOn(saved.value));
 const canDelete = computed(() => profiles.value.length > 1 && !(editingOn.value && enabledProfiles.value.length < 2));
 const message = computed(() => note.value || (saved.value && !isOn(saved.value) ? 'This orchestrator is disabled: it is hidden from the chat picker and the server refuses to use it.' : '')
-  || (needsToken.value ? 'This orchestrator uses a Hugging Face hosted model. Add your token on the Models page first.' : ''));
+  || (missingKeys.value.length ? `This orchestrator uses a hosted model. Add your ${missingKeys.value.map(k => PROVIDERS[k].label + ' ' + PROVIDERS[k].secret).join(' and ')} on the Models page first.` : ''));
 
 // Model choices, grouped by where they run. A saved value that is in no list stays visible instead of being swapped silently.
 function modelGroups(engine, cur) {
   const own = (cfg.value.engine_models || {})[engine];
   const groups = own ? [{ label: 'Models', models: own }]
-    : [{ label: 'Local (Ollama)', models: cfg.value.models }, { label: 'Hugging Face (hosted, no download)', models: hostedModels.value }];
+    : [{ label: 'Local (Ollama)', models: cfg.value.models },
+       ...Object.entries(PROVIDERS).map(([k, p]) => ({ label: `${p.label} (hosted, no download)`, models: cfg.value[k + '_models'] || [] }))];
   if (cur && !groups.some(g => g.models.includes(cur))) groups.unshift({ label: 'Current', models: [cur] });
   return groups.filter(g => g.models.length);
 }
 const engineModelList = engine => modelGroups(engine, '').flatMap(g => g.models);
-const needsToken = computed(() => !cfg.value.hf.configured && !!draft.value && [draft.value.engine_model, draft.value.model].some(isHosted));
+// hosted providers this draft uses that have no key yet
+const missingKeys = computed(() => !draft.value ? [] : [...new Set([draft.value.engine_model, draft.value.model].map(hostedKind).filter(k => k && !cfg.value[k]?.configured))]);
 const select = i => { editing.value = i; loadDraft(); };
 const shown = (x, i) => i === editing.value && draft.value ? draft.value : x;
 const summary = p => `${p.engine}${MODEL_ENGINES.includes(p.engine) ? ' (' + shortModel(p.engine_model) + ')' : ''} → ${p.mode} → ` +

@@ -2,7 +2,7 @@
 
 Layered tiny-model orchestration. You pick a **decision engine** and an **orchestrator**; each job goes to a
 small **expert** (a tiny model, a tool, or both). Every decision is traced, so you can later fine-tune your own.
-Models can run locally (Ollama) or hosted on Hugging Face, chosen per model. There is a web UI, a desktop app and a CLI.
+Models can run locally (Ollama) or hosted by Hugging Face or OpenRouter, chosen per model. There is a web UI, a desktop app and a CLI.
 
 ```
 message -> [decision engine] -> [orchestrator: Microsoft Agent Framework workflow] -> [expert(s)] -> answer
@@ -25,13 +25,17 @@ Files expert: open a file right in the chat, or get download / open-with-app opt
 |---|---|
 | ![C# expert answering with a code block](docs/code.png) | ![Orchestrators page with a profile editor](docs/orchestrators.png) |
 
-Models page: every model is labelled by where it runs, local (Ollama) or hosted on Hugging Face, and you can add more from Hugging Face.
+Models page, tab **My models**: every model is labelled by where it runs: local (Ollama), or hosted by Hugging Face or OpenRouter. Hugging Face and OpenRouter have their own tabs.
 
-![Models page listing local and Hugging Face hosted models, with the Hugging Face token box](docs/models.png)
+![Models page listing local models and hosted ones from Hugging Face and OpenRouter, each labelled with where it runs](docs/models.png)
 
-Add from Hugging Face: use a model hosted there (no download), or download a GGUF into Ollama after choosing its quantisation.
+Hugging Face: use a hosted model (no download), or download a GGUF into Ollama after choosing its quantisation.
 
 ![Hugging Face search results: hosted models with their capabilities and GGUF repositories with a quantisation picker](docs/huggingface.png)
+
+OpenRouter: search its catalogue, see what each model supports and costs, and use it hosted (OpenRouter has nothing to download).
+
+![OpenRouter search results with tool-call, structured-output and log-prob support and prices per million tokens](docs/openrouter.png)
 
 Regenerate them against a running server with `python scripts/readme_shots.py` (needs `pip install -e ".[dev]"` plus `playwright install chromium`, or `CHROMIUM=/path/to/chromium`).
 
@@ -42,7 +46,7 @@ Regenerate them against a running server with `python scripts/readme_shots.py` (
 | Chat | Ask anything; pick an orchestrator and Route / Fan-out; open "routing decision" to see every expert's score; file results open in place | `#/chat`, `#/chat/<id>` |
 | Orchestrators | Cards for saved profiles with an on/off switch each; the editor below changes a draft that the selected card shows live ("unsaved") until you Save | `#/orch` |
 | Experts | Every expert with its examples and an on/off switch | `#/experts` |
-| Models | Every model and where it runs; add hosted or downloaded models from Hugging Face | `#/models` |
+| Models | Three tabs: **My models** (every model and where it runs), **Hugging Face** and **OpenRouter** (add hosted models; download GGUFs from Hugging Face) | `#/models`, `#/models/hf`, `#/models/or` |
 | Traces | Every routing decision, the raw material for fine-tuning | `#/traces` |
 
 The sidebar shows how many orchestrators and experts are enabled (for example `5/7`). The page is kept in the URL, so a
@@ -216,26 +220,28 @@ Laya is meant to be fine-tuned, and Noah's traces can serve as the training data
 Check each model's license before use: a third-party listing says Nemotron-Orchestrator-8B is research-only, and
 FunctionGemma is under the Gemma terms.
 
-## Hugging Face models (hosted or downloaded)
+## Hosted and local models (Hugging Face, OpenRouter, Ollama)
 
-Every place that takes a model (orchestrator model, tiny argument model, generate experts) accepts either kind, and
-the **Models** page shows which is which ("Local · Ollama" or "Hugging Face · hosted"):
+Every place that takes a model (orchestrator model, tiny argument model, generate experts) accepts any kind, and
+the **Models** page shows which is which ("Local · Ollama", "Hugging Face · hosted" or "OpenRouter · hosted"):
 
 | | Where it runs | Needs | Name |
 |---|---|---|---|
-| **Hosted** | Hugging Face's Inference Providers, called through their API. Nothing is downloaded. | a token | `hf:Qwen/Qwen2.5-7B-Instruct` |
-| **Local** | Ollama on this machine | a download (GGUF) | `hf.co/unsloth/Qwen3-4B-GGUF:Q4_K_M` |
+| **Local** | Ollama on this machine | a download (GGUF) | `qwen2.5:0.5b`, `hf.co/unsloth/Qwen3-4B-GGUF:Q4_K_M` |
+| **Hugging Face hosted** | Hugging Face Inference Providers, through their API. Nothing is downloaded. | a token | `hf:Qwen/Qwen2.5-7B-Instruct` |
+| **OpenRouter hosted** | OpenRouter, through its API (it has nothing to download). | an API key | `or:meta-llama/llama-3.3-70b-instruct:free` |
 
-On **Models > Add from Hugging Face**: search, then either **Use hosted** (adds it to every model dropdown, with a Test
-button) or **Download…** (pick a quantisation, see its size, watch the progress; Ollama pulls it and it becomes a local
-model). Hosted models need a token from huggingface.co/settings/tokens with the "Make calls to Inference Providers"
-permission: paste it on that page, or set `HF_TOKEN` (compose passes it through). A pasted token is stored in
-`data/hf_token` (owner-only, git-ignored, never sent back to the browser). Any `org/model` id works by hand, including
-router suffixes like `Qwen/Qwen2.5-7B-Instruct:fastest` or `:cheapest`.
+On **Models**, each provider has its own tab (Hugging Face, OpenRouter): paste your key, search, and press **Use hosted**. The model then
+appears in every model dropdown (grouped by where it runs) and gets a **Test** button. Searching shows what each model
+supports (tool calls, structured output, log-probs), its price per million tokens and its context size. For
+Hugging Face you can instead press **Download…**, pick a quantisation (sizes shown) and watch Ollama pull it; it then
+becomes a local model.
 
-- Hosted models send your messages (and the expert list, for orchestrators) to Hugging Face and its providers, and may cost credits. Local models never leave the machine. The UI says so next to the token box.
-- Pick hosted models by what the provider supports: orchestrators (`llm_tools`) need **tool calls**; the argument extractor uses structured output and falls back to tool calls. The `llm_choice` decision engine reads token log-probabilities, which many hosted providers do not return, so use it with local models.
-- Failures are explained (bad token, no credits, model not on the router) instead of silently falling back to the rule extractor.
+- **Keys.** Hugging Face: a token from huggingface.co/settings/tokens with the "Make calls to Inference Providers" permission. OpenRouter: a key from openrouter.ai/keys. Paste it on the Models page, or set `HF_TOKEN` / `OPENROUTER_API_KEY` (compose passes both through). A pasted key is stored in `data/hf_token` or `data/openrouter_key` (owner-only, git-ignored) and is never sent back to the browser. Each provider only ever receives its own key.
+- **Any id works by hand**, including suffixes such as `Qwen/Qwen2.5-7B-Instruct:fastest` (Hugging Face) or `meta-llama/llama-3.3-70b-instruct:free` / `:nitro` (OpenRouter).
+- **Privacy and cost.** Hosted models send your messages (and the expert list, for orchestrators) to the provider and the model host, and may cost credits. Local models never leave the machine. The UI says so next to each key box.
+- **Pick by capability.** Orchestrators (`llm_tools`) need **tool calls**; the argument extractor uses structured output and falls back to tool calls. The `llm_choice` decision engine reads token log-probabilities, so choose a model marked **log-probs** (or a local one).
+- **Clear errors.** A bad key, no credits, a rate limit or a model the provider does not serve is explained in plain words instead of silently falling back to the rule extractor.
 
 ## Files expert
 

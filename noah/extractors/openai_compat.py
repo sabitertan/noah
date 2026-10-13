@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..llm import LLMError, chat, is_hf
+from ..llm import LLMError, chat, is_hosted
 from ..types import Expert
 from . import validate_args
 from .rule import RuleExtractor
@@ -59,7 +59,7 @@ class OpenAICompatExtractor:
 
     def extract(self, message: str, expert: Expert) -> dict[str, Any]:
         # Hosted models vary in what a provider supports (structured output vs tool calls), so try the other shape too.
-        modes = [self.mode, *(["tools" if self.mode == "schema" else "schema"] if is_hf(self.model) else [])]
+        modes = [self.mode, *(["tools" if self.mode == "schema" else "schema"] if is_hosted(self.model) else [])]
         for mode in modes:
             try:
                 return self._try(mode, message, expert)

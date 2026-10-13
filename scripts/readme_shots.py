@@ -36,19 +36,35 @@ with sync_playwright() as p:
     pg.click("[data-view=orch]"); pg.wait_for_timeout(400)
     pg.screenshot(path="docs/orchestrators.png")
 
-    # Hugging Face: local and hosted models side by side, then a GGUF download with its quantisations (nothing is downloaded)
+    # Models page tabs: My models (local + hosted, labelled), Hugging Face (hosted or GGUF download), OpenRouter (hosted)
     hf = b.new_page(viewport={"width": 1280, "height": 900})
-    hf.goto(base + "/#/models"); hf.wait_for_selector("#hfHosted tbody tr")
-    hf.fill("#hf-search", "qwen"); hf.wait_for_timeout(1500); hf.wait_for_selector("#hfHosted tbody tr")
-    model = hf.locator("#hfHosted tbody tr").first.locator("td").first.inner_text()
-    hf.locator("#hfHosted tbody tr button:has-text('Use hosted')").first.click()
-    hf.wait_for_selector(f"#modelsTable tr[data-model='hf:{model}']")
-    hf.locator(f"#modelsTable tr[data-model='hf:{model}'] button:has-text('Test')").wait_for()
-    hf.evaluate("document.querySelector('#v-models').scrollTop = 0"); hf.wait_for_timeout(200)
+    hf.goto(base + "/#/models"); hf.wait_for_selector("#modelsTable tbody tr")
+
+    def open_tab(name):
+        hf.click(f"[data-tab={name}]"); hf.wait_for_selector(f"[data-tab={name}].active")
+
+    def use_hosted(prefix, key, query):  # add the first search result that supports tool calls; returns its id
+        open_tab(key)
+        hf.wait_for_selector(f"#{key}Hosted tbody tr")
+        hf.fill(f"#{key}-search", query); hf.wait_for_timeout(1500); hf.wait_for_selector(f"#{key}Hosted tbody tr")
+        row = hf.locator(f"#{key}Hosted tbody tr", has_text="tool calls").first
+        mid = row.locator("td").first.inner_text().split("\n")[0]
+        row.locator("button:has-text('Use hosted')").click()
+        hf.wait_for_selector(f"#modelsTable tr[data-model='{prefix}{mid}']", state="attached")
+        return mid
+    hf_model, or_model = use_hosted("hf:", "hf", "qwen"), use_hosted("or:", "or", "llama")
+
+    open_tab("local")
+    hf.evaluate("document.querySelector('#v-models').scrollTop = 1e5"); hf.wait_for_timeout(200)   # the hosted rows are at the bottom
     hf.screenshot(path="docs/models.png")
+
+    open_tab("hf")
     hf.locator("#hfGguf button:has-text('Download…')").first.click(); hf.wait_for_selector("#hfGguf select")
-    hf.locator("#hfGguf").scroll_into_view_if_needed(); hf.evaluate("document.querySelector('#hfGguf').scrollIntoView({block: 'start'})")
-    hf.wait_for_timeout(300)
+    hf.evaluate("document.querySelector('#hfGguf').scrollIntoView({block: 'start'})"); hf.wait_for_timeout(300)
     hf.screenshot(path="docs/huggingface.png")
-    hf.request.delete(f"{base}/api/hf/my/{model}")  # leave the server as we found it
+
+    open_tab("or")
+    hf.evaluate("document.querySelector('#v-models').scrollTop = 0"); hf.wait_for_timeout(300)
+    hf.screenshot(path="docs/openrouter.png")
+    hf.request.delete(f"{base}/api/hf/my/{hf_model}"); hf.request.delete(f"{base}/api/or/my/{or_model}")  # leave the server as we found it
     b.close()

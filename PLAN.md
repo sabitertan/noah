@@ -138,3 +138,13 @@ user message
   (network faked), plus a browser run against a stub standing in for Ollama + HF router + hub (token, hosted add/test, download with progress, dropdown groups,
   a chat answered through a hosted extractor, disconnect). Real HF endpoints verified unauthenticated only (model list, GGUF search, quants, token rejection).
   NOT verified: any real inference call (no token here), real Ollama pull of an HF repo, provider differences (tools/structured output/logprobs), Windows/macOS.
+- OpenRouter (2026-10-13): hosted-only (`or:org/model`, key from openrouter.ai/keys; OpenRouter has no downloads). Generalised the Hugging Face layer into providers:
+  `noah/llm.py` `Provider` (prefix, base URL, key sources, per-provider plain-words errors), `noah/hosted.py` (shared status/key/my-models/test routes), `noah/hf.py`
+  and `noah/openrouter.py` (search). Each provider only ever sends its own key. Search shows tool-call / structured-output / log-prob support, price per million tokens,
+  context. Frontend: one `HostedPanel.vue` for both providers + `GgufDownloads.vue` (HF only); orchestrator dropdowns grouped Local / Hugging Face / OpenRouter.
+  98 Python tests (17 new for OpenRouter, network faked), 36 browser checks against a stub of Ollama + HF + OpenRouter (HF regression + OpenRouter key/search/use/test/
+  chat/disconnect), 43 + 21 earlier UI checks still pass. Real OpenRouter list verified unauthenticated (461 models, capabilities, prices). No real OpenRouter inference
+  call was made (no key here).
+- Models page tabs (2026-10-13): My models / Hugging Face / OpenRouter, the tab is part of the route (`#/models`, `#/models/hf`, `#/models/or`), other pages remember the last tab,
+  provider panels are created on first visit and kept (search text and running downloads survive tab switches). 43 browser checks (HF + OpenRouter flows, tab URL, refresh,
+  deep link, unknown tab, back button, state kept across tabs) + 43 + 21 earlier UI checks pass; screenshots regenerated.

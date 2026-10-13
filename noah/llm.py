@@ -1,12 +1,14 @@
 """Where a model is served from, and one way to call it.
 
-A model name is either local (served by Ollama or any OpenAI-compatible server at `base_url`) or hosted on
-Hugging Face: `hf:<org>/<name>` goes to Hugging Face's Inference Providers router with the user's token, no download.
+A model name is local (served by Ollama or any OpenAI-compatible server at `base_url`) or hosted by a provider:
+`hf:<org>/<name>` goes to Hugging Face's Inference Providers router, `or:<org>/<name>` to OpenRouter, each with the
+user's own key. Hosted models are called through the provider's API; nothing is downloaded.
 """
 from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -14,7 +16,47 @@ import httpx
 HF_PREFIX = "hf:"
 HF_ROUTER = os.environ.get("NOAH_HF_ROUTER", "https://router.huggingface.co/v1")
 HF_HUB = os.environ.get("NOAH_HF_HUB", "https://huggingface.co")
+OR_PREFIX = "or:"
+OR_BASE = os.environ.get("NOAH_OR_BASE", "https://openrouter.ai/api/v1")
 HF_ID = re.compile(r"^[\w.\-]+/[\w.\-]+(:[\w\-]+)?$")  # org/name, optionally :provider or :fastest / :cheapest
+OR_ID = re.compile(r"^~?[\w.\-]+/[\w.\-+~]+(:[\w\-]+)?$")  # org/name, optionally :free / :nitro / :floor
+
+
+@dataclass(frozen=True)
+class Provider:
+    key: str                 # "hf" | "or": the /api/<key> routes and the config field
+    label: str
+    prefix: str
+    base: str
+    secret: str              # what the user calls the credential: "token" / "API key"
+    envs: tuple[str, ...]    # environment variables that can hold it
+    file_env: str
+    file_default: str
+    models_env: str
+    models_default: str
+    id_re: re.Pattern
+    errors: dict = field(default_factory=dict)  # HTTP status -> plain-words explanation ({name} = the model)
+
+
+HF = Provider("hf", "Hugging Face", HF_PREFIX, HF_ROUTER, "token", ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"),
+              "NOAH_HF_TOKEN_FILE", "data/hf_token", "NOAH_HF_MODELS", "data/hf_models.json", HF_ID, {
+    401: "Hugging Face rejected the token. Check it on the Models page.",
+    402: "Hugging Face says you are out of Inference Providers credits.",
+    403: "The token may not be allowed to call Inference Providers (create one with that permission), or the model is gated.",
+    404: "{name} is not available on Hugging Face Inference Providers.",
+    422: "Hugging Face could not run {name} with this request (the provider may not support tools or structured output).",
+    429: "Hugging Face is rate limiting this token. Wait a moment and retry.",
+})
+OR = Provider("or", "OpenRouter", OR_PREFIX, OR_BASE, "API key", ("OPENROUTER_API_KEY",),
+              "NOAH_OR_TOKEN_FILE", "data/openrouter_key", "NOAH_OR_MODELS", "data/openrouter_models.json", OR_ID, {
+    400: "OpenRouter could not run {name} with this request (it may not support tools or structured output).",
+    401: "OpenRouter rejected the API key. Check it on the Models page.",
+    402: "OpenRouter says you are out of credits (or {name} needs a paid balance).",
+    403: "OpenRouter blocked the request (key permissions or content moderation).",
+    404: "{name} is not available on OpenRouter right now, or no provider serves it with these settings.",
+    429: "OpenRouter is rate limiting this key (free models have low limits). Wait a moment and retry.",
+})
+PROVIDERS = (HF, OR)
 
 
 class LLMError(RuntimeError):
@@ -25,32 +67,41 @@ class LLMError(RuntimeError):
         self.status = status
 
     @property
-    def fatal(self) -> bool:  # retrying a different request shape will not help (no/bad token, no credits, rate limit)
+    def fatal(self) -> bool:  # retrying a different request shape will not help (no/bad key, no credits, rate limit)
         return self.status in (None, 401, 402, 403, 429)
 
 
+def provider_of(model: str) -> Provider | None:
+    m = str(model or "")
+    return next((p for p in PROVIDERS if m.startswith(p.prefix)), None)
+
+
+def is_hosted(model: str) -> bool:
+    return provider_of(model) is not None
+
+
 def is_hf(model: str) -> bool:
-    return str(model or "").startswith(HF_PREFIX)
+    return provider_of(model) is HF
 
 
-def _token_file() -> Path:
-    return Path(os.environ.get("NOAH_HF_TOKEN_FILE", "data/hf_token"))
+def _token_file(p: Provider) -> Path:
+    return Path(os.environ.get(p.file_env, p.file_default))
 
 
-def token() -> tuple[str, str]:
-    """(token, source) where source is 'env', 'file' or '' when there is none."""
-    for var in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
+def token(p: Provider = HF) -> tuple[str, str]:
+    """(credential, source) where source is 'env', 'file' or '' when there is none."""
+    for var in p.envs:
         if os.environ.get(var, "").strip():
             return os.environ[var].strip(), "env"
     try:
-        t = _token_file().read_text().strip()
+        t = _token_file(p).read_text().strip()
         return (t, "file") if t else ("", "")
     except OSError:
         return "", ""
 
 
-def save_token(value: str) -> None:
-    f = _token_file()
+def save_token(value: str, p: Provider = HF) -> None:
+    f = _token_file(p)
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(value.strip())
     try:
@@ -59,33 +110,27 @@ def save_token(value: str) -> None:
         pass
 
 
-def clear_token() -> None:
+def clear_token(p: Provider = HF) -> None:
     try:
-        _token_file().unlink()
+        _token_file(p).unlink()
     except OSError:
         pass
 
 
 def resolve(base_url: str, model: str) -> tuple[str, str, dict]:
     """(base_url, model name to send, extra headers) for a model reference."""
-    if not is_hf(model):
+    p = provider_of(model)
+    if p is None:
         return base_url, model, {}
-    tok, _ = token()
+    tok, _ = token(p)
     if not tok:
-        raise LLMError("This model runs on Hugging Face but no token is set. Add one on the Models page.")
-    return HF_ROUTER, model[len(HF_PREFIX):], {"Authorization": f"Bearer {tok}"}
+        raise LLMError(f"This model runs on {p.label} but no {p.secret} is set. Add one on the Models page.")
+    return p.base, model[len(p.prefix):], {"Authorization": f"Bearer {tok}"}
 
 
-def _explain(status: int, model: str) -> str:
-    name = model[len(HF_PREFIX):] if is_hf(model) else model
-    return {
-        401: "Hugging Face rejected the token. Check it on the Models page.",
-        402: "Hugging Face says you are out of Inference Providers credits.",
-        403: "The token may not be allowed to call Inference Providers (create one with that permission), or the model is gated.",
-        404: f"{name} is not available on Hugging Face Inference Providers.",
-        422: f"Hugging Face could not run {name} with this request (the provider may not support tools or structured output).",
-        429: "Hugging Face is rate limiting this token. Wait a moment and retry.",
-    }.get(status, f"Hugging Face returned HTTP {status} for {name}.")
+def _explain(p: Provider, status: int, model: str) -> str:
+    name = model[len(p.prefix):]
+    return p.errors.get(status, f"{p.label} returned HTTP {status} for {{name}}.").format(name=name)
 
 
 def chat(base_url: str, body: dict, timeout: float) -> dict:
@@ -97,7 +142,8 @@ def chat(base_url: str, body: dict, timeout: float) -> dict:
         r = httpx.post(f"{url.rstrip('/')}/chat/completions", json={**body, "model": name}, timeout=timeout, **extra)
         r.raise_for_status()
     except httpx.HTTPStatusError as e:
-        if is_hf(model):
-            raise LLMError(_explain(e.response.status_code, model), e.response.status_code) from None  # never echo headers
+        p = provider_of(model)
+        if p:
+            raise LLMError(_explain(p, e.response.status_code, model), e.response.status_code) from None  # never echo headers
         raise
     return r.json()

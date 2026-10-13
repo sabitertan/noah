@@ -24,7 +24,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     monkeypatch.setenv("NOAH_HF_TOKEN_FILE", str(tmp_path / "hf_token"))
-    monkeypatch.setattr(hf, "MY_MODELS", tmp_path / "hf_models.json")
+    monkeypatch.setenv("NOAH_HF_MODELS", str(tmp_path / "hf_models.json"))
     monkeypatch.setattr(server, "PROFILES", tmp_path / "profiles.json")
     monkeypatch.setattr(server, "DISABLED", tmp_path / "d.json")
     hf._cache.clear()
