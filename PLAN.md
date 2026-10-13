@@ -111,3 +111,7 @@ user message
   an expert's manifest raised off-topic scores above the 0.63 threshold; file-specific examples widened the gap from -0.05 to +0.08.
   NOT verified: "Open with app" actually launching apps (Linux xdg-open / Windows startfile / macOS open), PDFs with complex
   layouts, encrypted PDFs, very large files, the Windows/macOS packaged builds.
+- Orchestrator enable/disable switch (2026-10-13): `enabled` flag per profile (missing = enabled), `PUT /api/profiles/{name}`,
+  server refuses disabled profiles (409) and refuses disabling the last enabled one (400); UI switch on cards, picker lists
+  enabled only, active falls back, sidebar shows enabled/total. 7 new server tests + browser walkthrough (throwaway server).
+  Process slip: one scripted edit truncated server.py (file endpoints); caught by grep, restored from git, tests confirmed.

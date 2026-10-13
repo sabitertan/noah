@@ -44,8 +44,8 @@ function renderSidebar() {
       : '<div class="item"><span class="meta">No chats yet</span></div>'}</div>
     <div class="item ${open.setup ? 'open' : ''}" data-group="setup">${svg('tool')}<span class="grow">Setup</span>${svg('chev', 12).replace('<svg', '<svg class="chev"')}</div>
     <div class="group-body ${open.setup ? '' : 'closed'}">
-      ${nav('orch', 'cpu', 'Orchestrators', `<span class="meta">${profiles.length}</span>`)}
-      ${nav('experts', 'box', 'Experts', `<span class="meta">${cfg.experts.length}</span>`)}
+      ${nav('orch', 'cpu', 'Orchestrators', `<span class="meta">${countLabel(enabledProfiles().length, profiles.length)}</span>`)}
+      ${nav('experts', 'box', 'Experts', `<span class="meta">${countLabel(cfg.experts.filter(e => e.enabled).length, cfg.experts.length)}</span>`)}
       ${nav('models', 'list', 'Models', `<span class="dot ${cfg.models.length ? 'on' : ''}"></span>`)}
       ${nav('traces', 'list', 'Traces')}
     </div>
@@ -81,7 +81,10 @@ const saveChats = () => {  // file previews can be large; keep the cards but dro
   try { localStorage.setItem('noah.chats', JSON.stringify(chats, (k, v) => k === 'preview' ? undefined : v)); } catch (e) {}
   store.set('current', currentChat);
 };
-const profile = () => profiles.find(p => p.name === activeProfile) || profiles[0];
+const countLabel = (on, total) => on === total ? String(total) : `${on}/${total}`;  // "7", or "5/7" when some are off
+const isOn = p => p.enabled !== false;               // profiles saved before the switch existed count as enabled
+const enabledProfiles = () => profiles.filter(isOn);
+const profile = () => { const on = enabledProfiles(); return on.find(p => p.name === activeProfile) || on[0]; };  // never a disabled one
 
 
 /* ---------- file cards (files expert) ---------- */
@@ -125,7 +128,7 @@ const renderMsg = m => `<div class="msg"><div class="u"><span>${esc(m.text)}</sp
 
 function renderChat() {
   const c = chatObj();
-  $('profileSel').innerHTML = profiles.map(p => `<option ${p.name === activeProfile ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  $('profileSel').innerHTML = enabledProfiles().map(p => `<option ${profile() && p.name === profile().name ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
   syncMode();
   if (!c || !c.messages.length) {
     const ex = cfg.experts.filter(e => e.enabled).flatMap(e => e.examples.slice(0, 1));
@@ -171,8 +174,8 @@ async function send() {
   const m = { text, pending: true }; c.messages.push(m); renderChat(); renderSidebar(); $('title').textContent = c.title;
   try {
     const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      message: text, engine: p.engine, engine_model: p.engine_model || '', mode: p.mode, extractor: p.extractor, model: p.model, threshold: p.threshold }) });
-    if (!r.ok) throw new Error('server error ' + r.status);
+      message: text, profile: p.name, engine: p.engine, engine_model: p.engine_model || '', mode: p.mode, extractor: p.extractor, model: p.model, threshold: p.threshold }) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'server error ' + r.status);
     Object.assign(m, await r.json(), { profile: p.name, engine: p.engine });
   } catch (err) { m.error = err.message; }
   delete m.pending; saveChats(); busy = false; $('send').disabled = false; renderChat(); $('msg').focus();
@@ -187,7 +190,7 @@ function renderOrch() {
   const p = profiles[editing];
   const opts = (items, v) => items.map(i => `<option ${i === v ? 'selected' : ''}>${esc(i)}</option>`).join('');
   $('orchPanel').innerHTML = `<h2>Orchestrators</h2><p class="lede">An orchestrator is a saved combination of decision engine, orchestration mode and argument extractor. Create as many as you like.</p>
-    <div class="cards">${profiles.map((x, i) => `<div class="card ${i === editing ? 'sel' : ''}" data-edit="${i}"><h3>${svg('cpu')}${esc(x.name)}${x.name === activeProfile ? '<span class="badge">active</span>' : ''}</h3>
+    <div class="cards">${profiles.map((x, i) => `<div class="card ${i === editing ? 'sel' : ''} ${isOn(x) ? '' : 'off'}" data-edit="${i}"><h3>${svg('cpu')}<span class="grow">${esc(x.name)}</span>${profile() && x.name === profile().name ? '<span class="badge">active</span>' : ''}<label class="sw" title="${isOn(x) ? 'Enabled' : 'Disabled'}"><input type="checkbox" role="switch" data-toggle-profile="${esc(x.name)}" ${isOn(x) ? 'checked' : ''}><i></i></label></h3>
       <p>${esc(x.engine)}${MODEL_ENGINES.includes(x.engine) ? ' (' + esc(shortModel(x.engine_model)) + ')' : ''} → ${esc(x.mode)} → ${x.engine === 'llm_tools' ? 'model args' : esc(x.extractor) + (x.extractor === 'openai_compat' ? ' (' + esc(x.model) + ')' : '')}</p></div>`).join('')}
       <div class="card" data-new style="cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)">${svg('plus')}&nbsp;New orchestrator</div></div>
     <div class="form">
@@ -199,7 +202,8 @@ function renderOrch() {
       <label>Tiny model</label><select id="f-model" ${p.extractor === 'openai_compat' ? '' : 'disabled'}><option value="" ${p.model ? '' : 'selected'}>—</option>${opts(cfg.models.length ? cfg.models : [p.model], p.model)}</select>
       <label>Threshold <span id="f-thv">${p.threshold}</span></label><input type="range" id="f-threshold" min="0" max="1" step="0.05" value="${p.threshold}">
     </div>
-    <div class="actions"><button class="btn primary" id="f-save">Save</button><button class="btn" id="f-use">Use in chat</button><button class="btn danger" id="f-del" ${profiles.length < 2 ? 'disabled' : ''}>Delete</button></div>`;
+    <div class="actions"><button class="btn primary" id="f-save">Save</button><button class="btn" id="f-use" ${isOn(p) ? '' : 'disabled title="Enable this orchestrator first"'}>Use in chat</button><button class="btn danger" id="f-del" ${profiles.length < 2 || (isOn(p) && enabledProfiles().length < 2) ? 'disabled' : ''}>Delete</button></div>
+    <div class="fnote" id="orchMsg">${isOn(p) ? '' : 'This orchestrator is disabled: it is hidden from the chat picker and the server refuses to use it.'}</div>`;
   $('f-engine').onchange = () => { const e = $('f-engine').value; $('l-em').hidden = $('f-em').hidden = !MODEL_ENGINES.includes(e);
     $('f-em').innerHTML = opts(engineModels(e, p.engine_model), p.engine_model || ''); };
   $('f-extractor').onchange = () => { $('f-model').disabled = $('f-extractor').value !== 'openai_compat'; };
@@ -208,11 +212,26 @@ function renderOrch() {
     extractor: $('f-extractor').value, model: $('f-model').value, engine_model: $('f-em').value, threshold: parseFloat($('f-threshold').value) }); if (activeProfile === old) activeProfile = p.name; store.set('profile', activeProfile); };
   $('f-save').onclick = async () => { collect(); await saveProfiles(); renderOrch(); renderSidebar(); };
   $('f-use').onclick = async () => { collect(); activeProfile = p.name; store.set('profile', activeProfile); await saveProfiles(); show('chat'); };
-  $('f-del').onclick = async () => { profiles.splice(editing, 1); editing = 0; if (!profiles.find(x => x.name === activeProfile)) activeProfile = profiles[0].name; await saveProfiles(); renderOrch(); renderSidebar(); };
+  $('f-del').onclick = async () => { profiles.splice(editing, 1); editing = 0; if (!profile() || profile().name !== activeProfile) activeProfile = profile().name; store.set('profile', activeProfile); await saveProfiles(); renderOrch(); renderSidebar(); };
 }
 $('orchPanel').addEventListener('click', async e => {
+  if (e.target.closest('.sw')) return;  // the switch has its own handler; don't select the card
   const ed = e.target.closest('[data-edit]'); if (ed) { editing = +ed.dataset.edit; renderOrch(); }
-  if (e.target.closest('[data-new]')) { profiles.push({ ...profiles[editing], name: 'Orchestrator ' + (profiles.length + 1) }); editing = profiles.length - 1; await saveProfiles(); renderOrch(); renderSidebar(); }
+  if (e.target.closest('[data-new]')) { profiles.push({ ...profiles[editing], name: 'Orchestrator ' + (profiles.length + 1), enabled: true }); editing = profiles.length - 1; await saveProfiles(); renderOrch(); renderSidebar(); }
+});
+
+$('orchPanel').addEventListener('change', async e => {
+  const t = e.target.closest('[data-toggle-profile]'); if (!t) return;
+  const target = profiles.find(x => x.name === t.dataset.toggleProfile); if (!target) return;
+  const r = await fetch('/api/profiles/' + encodeURIComponent(target.name), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: t.checked }) });
+  if (r.ok) {
+    target.enabled = t.checked;
+    if (profile()) { activeProfile = profile().name; store.set('profile', activeProfile); }  // fall back if the active one was switched off
+    renderOrch(); renderSidebar();
+  } else {
+    renderOrch();  // revert the switch, then say why
+    $('orchMsg').textContent = (await r.json().catch(() => ({}))).detail || 'could not change the orchestrator';
+  }
 });
 
 /* ---------- experts / models / traces ---------- */
@@ -226,13 +245,13 @@ $('expertsPanel').addEventListener('change', async e => {
   const t = e.target.closest('[data-toggle]'); if (!t) return;
   const r = await fetch('/api/experts/' + encodeURIComponent(t.dataset.toggle), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: t.checked }) });
   if (r.ok) cfg.experts.find(x => x.name === t.dataset.toggle).enabled = t.checked;
-  renderExperts();
+  renderExperts(); renderSidebar();  // keep the menu count in sync
 });
 function renderModels() {
   const norm = m => { m = String(m || ''); return m && !m.split('/').pop().includes(':') ? m + ':latest' : m; };  // "x" == "x:latest"
   const orchestrators = m => profiles.flatMap(p => [
-    ...(['llm_tools', 'llm_choice'].includes(p.engine) && norm(p.engine_model) === norm(m) ? [`${p.name} (orchestrator)`] : []),
-    ...(p.engine !== 'llm_tools' && p.extractor === 'openai_compat' && norm(p.model) === norm(m) ? [`${p.name} (extractor)`] : []),
+    ...(['llm_tools', 'llm_choice'].includes(p.engine) && norm(p.engine_model) === norm(m) ? [`${p.name} (orchestrator${isOn(p) ? '' : ', disabled'})`] : []),
+    ...(p.engine !== 'llm_tools' && p.extractor === 'openai_compat' && norm(p.model) === norm(m) ? [`${p.name} (extractor${isOn(p) ? '' : ', disabled'})`] : []),
   ]);
   const experts = m => cfg.experts.filter(e => e.kind === 'generate' && norm(e.model) === norm(m)).map(e => e.name);
   const cell = list => list.length ? list.map(x => `<div>${esc(x)}</div>`).join('') : '<span class="meta">—</span>';
@@ -250,7 +269,7 @@ async function renderTraces() {
 (async () => {
   if (store.get('light', false)) document.documentElement.classList.add('light');
   [cfg, profiles] = await Promise.all([fetch('/api/config').then(r => r.json()), fetch('/api/profiles').then(r => r.json())]);
-  if (!profiles.find(p => p.name === activeProfile)) activeProfile = profiles[0].name;
+  if (profile()) activeProfile = profile().name;
   if (!chats.find(c => c.id === currentChat)) currentChat = null;
   show('chat');
 })();

@@ -122,6 +122,7 @@ _engines: dict[str, object] = {}  # engines can be expensive to load (embedding)
 
 class AskRequest(BaseModel):
     message: str
+    profile: str = ""  # orchestrator profile name (optional); a disabled profile is refused
     engine: str = "keyword"
     engine_model: str = ""
     mode: str = "route"
@@ -172,6 +173,10 @@ def config(request: Request):
 
 @app.post("/api/ask")
 async def ask(req: AskRequest):
+    if req.profile:
+        match = next((p for p in _load_profiles() if p.get("name") == req.profile), None)
+        if match is not None and not _profile_enabled(match):
+            raise HTTPException(409, f"Orchestrator '{req.profile}' is disabled. Enable it or pick another one.")
     key = f"{req.engine}:{req.engine_model}"
     if key not in _engines:
         if req.engine in ("llm_tools", "llm_choice"):
@@ -206,18 +211,52 @@ def traces(limit: int = 50):
     return trace.read()[-limit:][::-1]
 
 
+def _profile_enabled(p: dict) -> bool:
+    return p.get("enabled", True) is not False  # profiles saved before the switch existed count as enabled
+
+
+def _load_profiles() -> list[dict]:
+    if PROFILES.exists():
+        try:
+            return json.loads(PROFILES.read_text())
+        except (OSError, ValueError):
+            pass
+    return json.loads(json.dumps(DEFAULT_PROFILES))  # deep copy so callers can mutate
+
+
+def _save_profiles(profiles: list[dict]) -> None:
+    PROFILES.parent.mkdir(parents=True, exist_ok=True)
+    PROFILES.write_text(json.dumps(profiles, indent=2))
+
+
 @app.get("/api/profiles")
 def get_profiles():
-    if PROFILES.exists():
-        return json.loads(PROFILES.read_text())
-    return DEFAULT_PROFILES
+    return _load_profiles()
 
 
 @app.put("/api/profiles")
 def put_profiles(profiles: list[dict]):
-    PROFILES.parent.mkdir(parents=True, exist_ok=True)
-    PROFILES.write_text(json.dumps(profiles, indent=2))
+    if profiles and not any(_profile_enabled(p) for p in profiles):
+        raise HTTPException(400, "At least one orchestrator must stay enabled.")
+    _save_profiles(profiles)
     return profiles
+
+
+class ProfileToggle(BaseModel):
+    enabled: bool
+
+
+@app.put("/api/profiles/{name:path}")
+def toggle_profile(name: str, req: ProfileToggle):
+    profiles = _load_profiles()
+    target = next((p for p in profiles if p.get("name") == name), None)
+    if target is None:
+        raise HTTPException(404, f"Unknown orchestrator '{name}'")
+    if not req.enabled and not any(_profile_enabled(p) for p in profiles if p is not target):
+        raise HTTPException(400, "At least one orchestrator must stay enabled.")
+    target["enabled"] = req.enabled
+    _save_profiles(profiles)
+    return {"name": name, "enabled": req.enabled}
 
 
 class OpenRequest(BaseModel):

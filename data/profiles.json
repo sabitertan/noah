@@ -1,0 +1,40 @@
+[
+  {
+    "name": "Default",
+    "engine": "embedding",
+    "mode": "route",
+    "extractor": "openai_compat",
+    "model": "qwen2.5:0.5b",
+    "threshold": 0.63
+  },
+  {
+    "name": "Nemotron orchestrator",
+    "engine": "llm_tools",
+    "mode": "fanout",
+    "extractor": "rule",
+    "model": "",
+    "engine_model": "hf.co/MaziyarPanahi/Nemotron-Orchestrator-8B-GGUF:Q4_K_M",
+    "threshold": 0.25,
+    "enabled": true
+  },
+  {
+    "name": "FunctionGemma router",
+    "engine": "llm_tools",
+    "mode": "route",
+    "extractor": "rule",
+    "model": "",
+    "engine_model": "hf.co/ggml-org/functiongemma-270m-it-GGUF:Q8_0",
+    "threshold": 0.25,
+    "enabled": true
+  },
+  {
+    "name": "Tev1 decision",
+    "engine": "llm_choice",
+    "mode": "route",
+    "extractor": "openai_compat",
+    "model": "qwen2.5:0.5b",
+    "engine_model": "hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0",
+    "threshold": 0.5,
+    "enabled": false
+  }
+]

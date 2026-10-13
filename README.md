@@ -113,6 +113,10 @@ python -m noah.cli ask "calculate 15% of 240" --engine embedding
 | Argument extractor | `rule`, `openai_compat` (any small model, schema-constrained JSON) | `noah/extractors/` |
 
 Orchestrator profiles (a saved combination of the above) are created in the UI and stored in `data/profiles.json`.
+Each profile has an enable/disable switch (like experts). A disabled orchestrator is dimmed, hidden from the chat
+picker, and refused by the server (`/api/ask` with its `profile` name returns 409). If you switch off the active one,
+Noah falls back to the first enabled one, and the last enabled orchestrator can't be switched off. Toggle via the UI or
+`PUT /api/profiles/<name>` with `{"enabled": false}`.
 
 ## LLM orchestrators (Nemotron, FunctionGemma)
 
