@@ -9,13 +9,21 @@ ifeq ($(RUNTIME),podman)
 export PODMAN_USERNS = keep-id
 endif
 
-.PHONY: up dev down logs build test shell pull-models
+.PHONY: up dev dev-host ui ui-build down logs build test shell pull-models
 up:            ## build and start everything, UI at http://localhost:8765
 	mkdir -p traces data
 	$(COMPOSE) $(FILES) up --build
-dev:           ## like up, but mounts the source and reloads on any change (code, experts, web UI)
+dev:           ## like up, plus hot reload: Python/YAML via uvicorn, the web UI via Vite at http://localhost:5173
 	mkdir -p traces data
 	$(COMPOSE) $(FILES) -f compose.dev.yaml up --build
+dev-host:      ## no containers: API with reload on :8765 + Vite on :5173 (Linux/macOS; Windows: run the two commands from the README)
+	(cd frontend && npm install --no-audit --no-fund) && trap 'kill 0' INT TERM EXIT; \
+	  ( . .venv/bin/activate && uvicorn noah.server:app --port 8765 --reload --reload-include "*.yaml" ) & \
+	  ( cd frontend && npm run dev ) & wait
+ui:            ## only the web UI with hot reload at http://localhost:5173 (proxies /api to the server on :8765)
+	cd frontend && npm install && npm run dev
+ui-build:      ## build the web UI into noah/web/dist (what the server and desktop app serve)
+	cd frontend && npm ci && npm run build
 down:          ## stop and remove containers (models volume is kept)
 	$(COMPOSE) $(FILES) down
 logs:

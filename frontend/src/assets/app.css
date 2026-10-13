@@ -1,6 +1,6 @@
-@font-face { font-family: 'Fira Code'; font-weight: 300; font-display: swap; src: url('/static/fonts/FiraCode-Light.woff2') format('woff2'); }
-@font-face { font-family: 'Fira Code'; font-weight: 400; font-display: swap; src: url('/static/fonts/FiraCode-Regular.woff2') format('woff2'); }
-@font-face { font-family: 'Fira Code'; font-weight: 600; font-display: swap; src: url('/static/fonts/FiraCode-SemiBold.woff2') format('woff2'); }
+@font-face { font-family: 'Fira Code'; font-weight: 300; font-display: swap; src: url('./fonts/FiraCode-Light.woff2') format('woff2'); }
+@font-face { font-family: 'Fira Code'; font-weight: 400; font-display: swap; src: url('./fonts/FiraCode-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'Fira Code'; font-weight: 600; font-display: swap; src: url('./fonts/FiraCode-SemiBold.woff2') format('woff2'); }
 
 :root {
   --bg: #282c34; --fg: #9cdef2; --panel: #111214; --raised: #1b1e24; --border: #355a66;
@@ -148,3 +148,8 @@ th { color: var(--muted); font-weight: 400; }
 .sw input:checked + i { background: var(--accent); border-color: var(--accent); }
 .sw input:checked + i::after { transform: translateX(14px); background: var(--accent-ink); }
 .sw input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* vue mount point: lay out as if the wrapper were not there */
+#app { display: contents; }
+.card.new { cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); }
+.card .meta { color: var(--muted); font-size: 11px; }

@@ -115,3 +115,19 @@ user message
   server refuses disabled profiles (409) and refuses disabling the last enabled one (400); UI switch on cards, picker lists
   enabled only, active falls back, sidebar shows enabled/total. 7 new server tests + browser walkthrough (throwaway server).
   Process slip: one scripted edit truncated server.py (file endpoints); caught by grep, restored from git, tests confirmed.
+- UI moved to Vue 3 (2026-10-13): vendored `vue.global.prod.js` (3.5.13, MIT, ~158 KB, no build step, works offline in the desktop app),
+  markup in `index.html`, state and logic in `app.js` (~300 lines, was 275 of string-building render functions). Cards and the
+  orchestrator editor now read one `profiles` + `draft` state, so they cannot disagree (the editor edits a draft, the selected card
+  shows it live with an "unsaved" tag; switching cards discards it). Duplicate orchestrator names are refused. Verified in Chromium
+  (46 checks: chat, file previews, editor/card sync, save/new/delete, both switches and counts, models, traces, theme, reload
+  persistence; no console warnings) plus the existing screenshot script; 55 Python tests pass. NOT verified: the packaged
+  desktop build with the new files (sidecar bundles `noah/web` wholesale, so it should just work), Windows/macOS.
+- UI routing (2026-10-13): the URL hash is the route (`#/orch`, `#/experts`, `#/models`, `#/traces`, `#/chat`, `#/chat/<id>`), so refresh, back/forward and deep links work; unknown views or chat ids fall back to a new chat. Hash routing needs no server support and works in the desktop app. 20 browser checks + the 46 earlier ones pass.
+- Vite + .vue components (2026-10-13): the UI moved from one app.js with a vendored Vue to `frontend/` (Vite 8, Vue 3.5.44, single-file components, state in
+  `src/store.js`). `npm run dev` gives HMR on :5173 with /api proxied to the server; `npm run build` writes `noah/web/dist` (92 KB JS / 35 KB gzip, smaller than the
+  158 KB vendored runtime + compiler). Server serves dist (`NOAH_WEB_DIST` overrides; a "not built" page if missing), the Dockerfile builds it in a Node stage,
+  `build_sidecar.py` builds it before PyInstaller, CI caches the frontend lockfile. Dropped the vendored Vue (3.5.13 has an npm-audit advisory; 3.5.44 clean).
+  Verified: the 46+20 browser checks pass against the built UI, the Vite dev server and the PyInstaller-frozen server; HMR kept the page and half-typed text across a
+  component edit and applied a CSS edit live; Docker UI stage built with Podman; 55 Python tests. NOT verified: the full Docker image, Windows/macOS CI, Electron
+  window with the new bundle (the frozen server serves it, so it should work). Trade-off: a source checkout now needs one `npm run build` (Node), where before it needed none.
+- Vite is the dev entry (2026-10-13): `make dev` adds a `ui` service (node:22, bind-mounted frontend, polling) at :5173 proxying to the API container; `make dev-host` runs API+Vite on the host. Verified HMR (component + CSS edit, typed text kept) through the container service with a bind mount. `make dev-host` itself not run (port 8765 was in use); full `make dev` compose not run.

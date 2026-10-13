@@ -36,5 +36,15 @@
     "engine_model": "hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0",
     "threshold": 0.5,
     "enabled": false
+  },
+  {
+    "name": "Smol",
+    "engine": "llm_choice",
+    "mode": "route",
+    "extractor": "openai_compat",
+    "model": "smollm2:360m",
+    "engine_model": "hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0",
+    "threshold": 0.5,
+    "enabled": true
   }
 ]

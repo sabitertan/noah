@@ -31,7 +31,7 @@ noah = "noah.cli:main"
 include = ["noah*"]
 
 [tool.setuptools.package-data]
-noah = ["web/*.html", "web/static/*", "web/static/fonts/*"]
+noah = ["web/dist/*", "web/dist/assets/*", "web/dist/licenses/*"]  # the built UI (frontend/: npm run build)
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -6,6 +6,7 @@ traces/
 research/
 *.egg-info/
 node_modules/
+noah/web/dist/
 desktop/dist/
 desktop/sidecar/dist/
 desktop/sidecar/build/

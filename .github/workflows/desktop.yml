@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - uses: actions/setup-node@v4
-        with: { node-version: "22", cache: npm, cache-dependency-path: desktop/package-lock.json }
+        with: { node-version: "22", cache: npm, cache-dependency-path: "desktop/package-lock.json\nfrontend/package-lock.json" }
 
       - name: Python deps + tests
         run: |

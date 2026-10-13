@@ -88,7 +88,7 @@ npm run dist                       # installer in desktop/dist/ (AppImage on Lin
   `ELECTRON_RUN_AS_NODE=1`, so starting `dist\win-unpacked\Noah.exe` from it fails with "bad option". Use
   `npm start` (it clears the variable), launch the app from Explorer, or run `Remove-Item Env:ELECTRON_RUN_AS_NODE` first.
 
-With containers, `make dev` adds `compose.dev.yaml`: it mounts `noah/` and `experts/` and reloads on every change.
+With containers, `make dev` adds `compose.dev.yaml`: it mounts `noah/` and `experts/`, reloads the server on every Python/YAML change, and runs the Vite dev server for the UI (see "Web UI development" below).
 
 ## Without containers
 
@@ -97,12 +97,34 @@ python3 -m venv .venv && . .venv/bin/activate    # Windows: python -m venv .venv
 pip install -e ".[dev]"
 ollama serve &                                   # any OpenAI-compatible server works
 ollama pull qwen2.5:0.5b && ollama pull qwen2.5-coder:1.5b
+(cd frontend && npm install && npm run build)     # build the web UI once (Node 20+); the server serves noah/web/dist
 uvicorn noah.server:app --port 8765              # NOAH_LLM_URL=http://host:port to point elsewhere
-# while developing, reload on any Python/YAML/web change (then F5 in the browser):
-uvicorn noah.server:app --port 8765 --reload --reload-include "*.yaml" --reload-include "*.js" --reload-include "*.css" --reload-include "*.html"
+# while developing, reload on any Python/YAML change:
+uvicorn noah.server:app --port 8765 --reload --reload-include "*.yaml"
 pytest
 python -m noah.cli ask "calculate 15% of 240" --engine embedding
 ```
+
+### Web UI development (Vue + Vite, hot reload)
+
+The UI is a Vue 3 app in `frontend/` (single-file components in `src/components/`, all shared state in `src/store.js`).
+Vite serves it with hot module reload and proxies `/api` to the Noah server:
+
+```bash
+make dev                                # containers: API with reload + Vite, UI at http://localhost:5173
+make dev-host                           # no containers (Linux/macOS): both on the host, same URLs
+# or by hand, in two terminals (Windows too):
+uvicorn noah.server:app --port 8765 --reload --reload-include "*.yaml"    # the API
+cd frontend && npm install && npm run dev                                 # Vite: http://localhost:5173
+```
+
+Work at **http://localhost:5173** (Vite). Port 8765 serves the last production build, so it will not show your edits.
+
+Edit a `.vue` file or `app.css` and the page updates in place without losing what you typed or the page you are on.
+`make ui-build` (or `cd frontend && npm run build`) writes the production UI to `noah/web/dist`, which the server, the
+Docker image (built in a Node stage, no Node at runtime) and the desktop app (`build_sidecar.py` runs it) all serve.
+`noah/web/dist` is not committed, so a source checkout needs that one build, or the server shows a page saying so.
+Another API port: `NOAH_API=http://127.0.0.1:9000 npm run dev`.
 
 ## Slots
 

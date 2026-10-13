@@ -1,6 +1,7 @@
-# Dev override: mounts the source and reloads uvicorn on any change (Python, YAML, and the web UI).
-#   make dev      (or: docker compose -f compose.yaml -f compose.dev.yaml up --build)
-# After a change the browser still needs a normal refresh (F5).
+# Dev override:  make dev   (or: docker compose -f compose.yaml -f compose.dev.yaml up --build)
+#   noah  mounts the source and reloads uvicorn on any Python/YAML change.
+#   ui    runs the Vite dev server with hot reload: open http://localhost:5173 (it proxies /api to noah).
+# http://localhost:8765 still serves the UI built into the image; use 5173 while working on the UI.
 services:
   noah:
     volumes:
@@ -8,5 +9,20 @@ services:
       - ./experts:/app/experts:z
     command: ["uvicorn", "noah.server:app", "--host", "0.0.0.0", "--port", "8765", "--reload",
               "--reload-dir", "/app/noah", "--reload-dir", "/app/experts",
-              "--reload-include", "*.yaml", "--reload-include", "*.js",
-              "--reload-include", "*.css", "--reload-include", "*.html"]
+              "--reload-include", "*.yaml"]
+
+  ui:
+    image: docker.io/library/node:22-slim
+    working_dir: /ui
+    environment:
+      NOAH_API: http://noah:8765
+      VITE_POLL: "1"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/ui:z
+      - ui_node_modules:/ui/node_modules      # keep Linux node_modules out of the host checkout
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0"]
+
+volumes:
+  ui_node_modules:

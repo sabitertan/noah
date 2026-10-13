@@ -7,3 +7,5 @@ traces
 *.log
 scripts/__pycache__
 .git
+frontend/node_modules
+noah/web/dist

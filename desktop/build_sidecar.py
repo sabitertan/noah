@@ -6,10 +6,20 @@ PyInstaller does not cross-compile: build on each OS you target (see .github/wor
 """
 import os
 import pathlib
+import shutil
+import subprocess
 
 import PyInstaller.__main__
 
 root = pathlib.Path(__file__).resolve().parent.parent
+
+# The server serves the built web UI (noah/web/dist), so build it first (needs Node; takes about a second).
+npm = shutil.which("npm") or "npm"
+ui = root / "frontend"
+if not (ui / "node_modules").is_dir():
+    subprocess.run([npm, "ci"], cwd=ui, check=True)
+subprocess.run([npm, "run", "build"], cwd=ui, check=True)
+
 out = root / "desktop" / "sidecar"
 PyInstaller.__main__.run([
     str(out / "noah_server.py"), "--name", "noah-server", "--noconfirm", "--onedir",

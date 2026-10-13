@@ -21,7 +21,7 @@ from .orchestrator import Orchestrator
 from .registry import load_experts
 from .trace import TraceStore
 
-WEB = Path(__file__).parent / "web"
+WEB = Path(os.environ.get("NOAH_WEB_DIST", Path(__file__).parent / "web" / "dist"))  # the built UI (frontend/: npm run build)
 OLLAMA = os.environ.get("NOAH_LLM_URL", "http://localhost:11434")
 
 app = FastAPI(title="noah")
@@ -79,7 +79,7 @@ async def launch_guard(request: Request, call_next):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
     return await call_next(request)
 
-app.mount("/static", StaticFiles(directory=WEB / "static"), name="static")
+app.mount("/assets", StaticFiles(directory=WEB / "assets", check_dir=False), name="assets")  # content-hashed JS/CSS/fonts
 PROFILES = Path(os.environ.get("NOAH_PROFILES", "data/profiles.json"))
 DEFAULT_PROFILES = [
     # bge-small cosine scores: in-domain >= 0.65, off-topic <= 0.61 on our test set, so 0.63 declines chit-chat.
@@ -131,18 +131,25 @@ class AskRequest(BaseModel):
     threshold: float = 0.25
 
 
+NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>Noah</title>
+<body style="font:15px/1.6 monospace;max-width:640px;margin:15vh auto;padding:0 20px">
+<h2>Noah: the web UI is not built yet</h2>
+<p>The API is running. Build the UI once with <code>cd frontend &amp;&amp; npm install &amp;&amp; npm run build</code>,
+or develop it with hot reload: <code>cd frontend &amp;&amp; npm run dev</code> and open http://localhost:5173.</p>"""
+
+
 @app.get("/")
 def index():
-    # version the asset URLs by mtime so browsers never keep a stale app.css/app.js after an update
-    ver = int(max((WEB / "static" / f).stat().st_mtime for f in ("app.css", "app.js")))
-    html = (WEB / "index.html").read_text().replace("/static/app.css", f"/static/app.css?v={ver}") \
-        .replace("/static/app.js", f"/static/app.js?v={ver}")
-    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+    page = WEB / "index.html"
+    if not page.is_file():
+        return HTMLResponse(NOT_BUILT, status_code=503)
+    return FileResponse(page, headers={"Cache-Control": "no-cache"})  # the page is tiny; its assets are content-hashed
 
 
 @app.get("/favicon.ico", include_in_schema=False)
+@app.get("/favicon.svg", include_in_schema=False)
 def favicon():
-    return FileResponse(WEB / "static" / "favicon.svg", media_type="image/svg+xml")
+    return FileResponse(WEB / "favicon.svg", media_type="image/svg+xml")
 
 
 def _is_local(request: Request) -> bool:
