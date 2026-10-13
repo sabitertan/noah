@@ -16,6 +16,10 @@ Each message is routed to one tiny expert; open "routing decision" to see how ev
 
 A generate expert (C#, Qwen2.5-Coder 1.5B) answers with code. Orchestrator profiles (decision engine + mode + extractor + model) are managed in the UI.
 
+Files expert: open a file right in the chat, or get download / open-with-app options.
+
+![The files expert previewing a Markdown file and a CSV, with Open, Download and Open with app buttons](docs/files.png)
+
 | Code expert | Orchestrator profiles |
 |---|---|
 | ![C# expert answering with a code block](docs/code.png) | ![Orchestrators page with a profile editor](docs/orchestrators.png) |
@@ -84,6 +88,8 @@ npm run dist                       # installer in desktop/dist/ (AppImage on Lin
   `ELECTRON_RUN_AS_NODE=1`, so starting `dist\win-unpacked\Noah.exe` from it fails with "bad option". Use
   `npm start` (it clears the variable), launch the app from Explorer, or run `Remove-Item Env:ELECTRON_RUN_AS_NODE` first.
 
+With containers, `make dev` adds `compose.dev.yaml`: it mounts `noah/` and `experts/` and reloads on every change.
+
 ## Without containers
 
 ```bash
@@ -92,6 +98,8 @@ pip install -e ".[dev]"
 ollama serve &                                   # any OpenAI-compatible server works
 ollama pull qwen2.5:0.5b && ollama pull qwen2.5-coder:1.5b
 uvicorn noah.server:app --port 8765              # NOAH_LLM_URL=http://host:port to point elsewhere
+# while developing, reload on any Python/YAML/web change (then F5 in the browser):
+uvicorn noah.server:app --port 8765 --reload --reload-include "*.yaml" --reload-include "*.js" --reload-include "*.css" --reload-include "*.html"
 pytest
 python -m noah.cli ask "calculate 15% of 240" --engine embedding
 ```
@@ -158,6 +166,31 @@ its threshold is low. Adding examples to its options made it worse (8/28): Laya'
 Laya is meant to be fine-tuned, and Noah's traces can serve as the training data.
 Check each model's license before use: a third-party listing says Nemotron-Orchestrator-8B is research-only, and
 FunctionGemma is under the Gemma terms.
+
+## Files expert
+
+The `files` expert searches `NOAH_FILES_DIR` (default `data/files`; the desktop app uses its own folder) and opens
+the best match straight away:
+
+| Type | Preview |
+|---|---|
+| `.txt`, `.log`, `.json`, `.yaml` | text |
+| `.md` | text with headings, bold and code |
+| `.csv`, `.tsv` | table (first 50 rows, 20 columns) |
+| `.pdf` | extracted text (first 5 pages) |
+
+Anything else (xlsx, docx, images, a scanned or broken PDF) says so and offers **Download** or **Open with app**.
+When several files match, you get a list with an **Open** button on each.
+
+- **Open with app** hands the file to the OS default application, so it only works on the computer running Noah
+  (the desktop app, or the web UI opened locally) and only for documents, images and media. Scripts and executables are
+  never launched. From a phone or another PC you get **Download**.
+- Access is confined to the files folder: `..`, absolute paths and symlinks that leave it are rejected, downloads are
+  sent as attachments, and file contents are never written to traces.
+- Search matches file names first, then the text of small text files. Extension-only and content-only matches are hidden
+  when one file clearly wins.
+- Keep an expert's `examples` file-specific. Generic phrases such as "open my ..." or "show me ..." also match small
+  talk and pushed off-topic messages above the routing threshold (0.70 vs 0.57 once fixed).
 
 ## Adding an expert
 

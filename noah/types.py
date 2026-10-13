@@ -50,3 +50,4 @@ class ExpertResult:
     extractor: str
     latency_ms: float
     error: str | None = None
+    attachments: list[dict[str, Any]] = field(default_factory=list)  # e.g. files the user can open or download

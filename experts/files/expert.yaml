@@ -1,8 +1,13 @@
 name: files
-description: Searches and lists documents in the user's files folder, like a cloud drive.
+description: Finds, opens and reads documents and files (txt, md, pdf, csv) in the user's files folder, like a cloud drive. Offers download or opening in another app for other file types.
+# Keep examples file-specific: generic phrases like "open my ..." or "show me ..." also match small talk and
+# pull chit-chat above the routing threshold (measured: off-topic max 0.70 vs 0.57 with these).
 examples:
   - find my invoice file
-  - list the documents in my drive
+  - open notes.md
+  - show me expenses.csv
+  - read quarterly_report.pdf
+  - list the files in my drive
   - search my files for the budget spreadsheet
   - do I have a file about taxes
 parameters:

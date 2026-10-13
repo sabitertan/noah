@@ -16,6 +16,7 @@ dependencies = [
   "pyyaml>=6",
   "fastembed>=0.7",
   "numpy>=1.26",
+  "pypdf>=5",
 ]
 
 [project.optional-dependencies]

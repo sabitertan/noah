@@ -104,3 +104,10 @@ user message
   in after-pack.js); `os.kill(pid, 0)` would terminate processes on Windows (fixed with a ctypes check).
   NOT verified: Windows and macOS builds (CI workflow written, never run), `.deb` (needs maintainer metadata),
   first-run embedding model download inside the packaged app, installer signing.
+- Files expert upgraded (2026-10-13): opens txt/md/csv/pdf in the chat (new `noah/filesvc.py`, `/api/files/{preview,download,open}`,
+  `attachments` on expert results, file cards in the UI), falls back to Download / Open with app for other types or unreadable
+  files. Path confinement + local-only launch + allow-listed types; previews never stored in traces. pypdf added. Verified in
+  Chromium (stubbed the real app launch) and through the frozen PyInstaller server. 41+ tests. Lesson: generic example phrases in
+  an expert's manifest raised off-topic scores above the 0.63 threshold; file-specific examples widened the gap from -0.05 to +0.08.
+  NOT verified: "Open with app" actually launching apps (Linux xdg-open / Windows startfile / macOS open), PDFs with complex
+  layouts, encrypted PDFs, very large files, the Windows/macOS packaged builds.

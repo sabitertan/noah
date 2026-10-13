@@ -77,8 +77,39 @@ function show(v) {
 
 /* ---------- chat ---------- */
 const chatObj = () => chats.find(c => c.id === currentChat);
-const saveChats = () => { store.set('chats', chats); store.set('current', currentChat); };
+const saveChats = () => {  // file previews can be large; keep the cards but drop previews (Open re-fetches them)
+  try { localStorage.setItem('noah.chats', JSON.stringify(chats, (k, v) => k === 'preview' ? undefined : v)); } catch (e) {}
+  store.set('current', currentChat);
+};
 const profile = () => profiles.find(p => p.name === activeProfile) || profiles[0];
+
+
+/* ---------- file cards (files expert) ---------- */
+const humanSize = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+const fileIcon = { markdown: 'M↓', text: 'TXT', csv: 'CSV', pdf: 'PDF', binary: '···' };
+function renderPreview(pv) {
+  if (!pv) return '';
+  if (pv.error) return `<div class="fnote">${esc(pv.error)} You can download the file${cfg.local ? ' or open it with another app' : ''}.</div>`;
+  const note = pv.note ? `<div class="fnote">${esc(pv.note)}</div>` : '';
+  if (pv.kind === 'csv') {
+    const [head, ...rows] = pv.rows;
+    return `<div class="fscroll"><table class="ftable"><tr>${head.map(c => `<th>${esc(c)}</th>`).join('')}</tr>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>${note}`;
+  }
+  if (pv.kind === 'markdown') return `<div class="fbody md">${fmt(pv.text)}</div>${note}`;
+  return `<pre class="fbody">${esc(pv.text)}</pre>${note}`;
+}
+function renderFiles(files) {
+  if (!files || !files.length) return '';
+  return `<div class="files">${files.map(f => {
+    const q = encodeURIComponent(f.path);
+    return `<div class="file" data-path="${esc(f.path)}"><div class="fhead"><span class="ficon">${esc(fileIcon[f.kind] || '···')}</span>
+      <span class="fname" title="${esc(f.path)}">${esc(f.path)}</span><span class="meta">${humanSize(f.size)}</span>
+      <span class="factions">${f.previewable ? '<button class="btn f-open" type="button">Open</button>' : ''}
+      <a class="btn" href="/api/files/download?path=${q}" download>Download</a>
+      ${f.openable && cfg.local ? '<button class="btn f-app" type="button">Open with app</button>' : ''}</span></div>
+      <div class="fpreview">${renderPreview(f.preview)}</div><div class="fmsg"></div></div>`;
+  }).join('')}</div>`;
+}
 
 function renderAnswers(m) {
   if (m.error) return `<div class="a err"><div class="body">${esc(m.error)}</div></div>`;
@@ -86,7 +117,7 @@ function renderAnswers(m) {
   const bars = m.decisions.map(d => `<div class="row"><span>${esc(d.expert)}</span><div class="bar"><i class="${chosen.has(d.expert) ? 'hit' : ''}" style="width:${Math.max(0, Math.min(1, d.score)) * 100}%"></i></div><span>${d.score.toFixed(2)}</span></div>`).join('');
   return m.results.map(r => `<div class="a ${r.error ? 'err' : ''}">
       <div class="head"><span class="badge">${esc(r.expert)}</span><span>${esc(r.extractor)} · ${r.latency_ms.toFixed(0)} ms</span></div>
-      <div class="body">${fmt(r.output)}</div>
+      <div class="body">${fmt(r.output)}</div>${renderFiles(r.attachments)}
       <details><summary>arguments</summary><code>${esc(JSON.stringify(r.args))}</code>${r.error ? `<br><code>${esc(r.error)}</code>` : ''}</details>
     </div>`).join('') + `<details><summary>routing decision · ${esc(m.profile)} · ${esc(m.engine)}</summary>${bars}</details>`;
 }
@@ -97,11 +128,32 @@ function renderChat() {
   $('profileSel').innerHTML = profiles.map(p => `<option ${p.name === activeProfile ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
   syncMode();
   if (!c || !c.messages.length) {
-    const ex = cfg.experts.flatMap(e => e.examples.slice(0, 1));
+    const ex = cfg.experts.filter(e => e.enabled).flatMap(e => e.examples.slice(0, 1));
     $('thread').innerHTML = `<div class="empty"><h1>${svg('cpu', 26)} Noah</h1><p>Tiny experts, one job each.</p><div class="chips">${ex.map(t => `<button class="chip" data-ex="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`;
   } else $('thread').innerHTML = c.messages.map(renderMsg).join('');
   $('log').scrollTop = $('log').scrollHeight;
 }
+
+$('thread').addEventListener('click', async e => {
+  const card = e.target.closest('.file'); if (!card) return;
+  const path = card.dataset.path, msg = card.querySelector('.fmsg'), box = card.querySelector('.fpreview');
+  if (e.target.closest('.f-open')) {
+    if (box.innerHTML) { box.innerHTML = ''; return; }  // second click closes the preview
+    box.innerHTML = '<div class="fnote">Opening…</div>';
+    try {
+      const r = await fetch('/api/files/preview?path=' + encodeURIComponent(path));
+      if (!r.ok) throw new Error((await r.json()).detail || 'could not open the file');
+      box.innerHTML = renderPreview((await r.json()).preview);
+    } catch (err) { box.innerHTML = `<div class="fnote">${esc(err.message)}</div>`; }
+  } else if (e.target.closest('.f-app')) {
+    msg.textContent = '';
+    try {
+      const r = await fetch('/api/files/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+      const j = await r.json();
+      msg.textContent = r.ok ? 'Opened in your default app.' : (j.detail || 'could not open the file');
+    } catch (err) { msg.textContent = err.message; }
+  }
+});
 $('thread').addEventListener('click', e => { const b = e.target.closest('[data-ex]'); if (b) { $('msg').value = b.dataset.ex; send(); } });
 $('profileSel').onchange = () => { activeProfile = $('profileSel').value; store.set('profile', activeProfile); syncMode(); };
 function syncMode() { const p = profile(); document.querySelectorAll('#modeToggle button').forEach(b => b.classList.toggle('on', p && b.dataset.m === p.mode)); }
@@ -166,10 +218,16 @@ $('orchPanel').addEventListener('click', async e => {
 /* ---------- experts / models / traces ---------- */
 function renderExperts() {
   $('expertsPanel').innerHTML = `<h2>Experts</h2><p class="lede">Each expert is a folder in <code>experts/</code>: a manifest, a small model and a tool. Drop one in and restart to add it.</p>
-    <div class="cards">${cfg.experts.map(e => `<div class="card"><h3>${svg('box')}${esc(e.name)}</h3><p>${esc(e.description)}</p>
+    <div class="cards">${cfg.experts.map(e => `<div class="card ${e.enabled ? '' : 'off'}"><h3>${svg('box')}<span class="grow">${esc(e.name)}</span><label class="sw" title="${e.enabled ? 'Enabled' : 'Disabled'}"><input type="checkbox" role="switch" data-toggle="${esc(e.name)}" ${e.enabled ? 'checked' : ''}><i></i></label></h3><p>${esc(e.description)}</p>
       <div class="tags"><span class="tag">${e.kind === 'generate' ? 'generates · ' + esc(e.model) : 'tool'}</span><span class="tag">license: ${esc(e.license)}</span>${Object.keys(e.parameters.properties || {}).map(k => `<span class="tag">${esc(k)}</span>`).join('')}</div>
       <details><summary>examples</summary>${e.examples.map(x => `<div><code>${esc(x)}</code></div>`).join('')}</details></div>`).join('')}</div>`;
 }
+$('expertsPanel').addEventListener('change', async e => {
+  const t = e.target.closest('[data-toggle]'); if (!t) return;
+  const r = await fetch('/api/experts/' + encodeURIComponent(t.dataset.toggle), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: t.checked }) });
+  if (r.ok) cfg.experts.find(x => x.name === t.dataset.toggle).enabled = t.checked;
+  renderExperts();
+});
 function renderModels() {
   const norm = m => { m = String(m || ''); return m && !m.split('/').pop().includes(':') ? m + ':latest' : m; };  // "x" == "x:latest"
   const orchestrators = m => profiles.flatMap(p => [

@@ -48,7 +48,7 @@ class ExpertNode(Executor):
 
     @handler
     async def run_expert(self, routed: Routed, ctx: WorkflowContext[Never, ExpertResult]) -> None:
-        start, args, error, out = time.perf_counter(), {}, None, ""
+        start, args, error, out, attachments = time.perf_counter(), {}, None, "", []
         extractor = self.extractor.name
         try:
             if self.expert.kind == "generate":
@@ -67,12 +67,16 @@ class ExpertNode(Executor):
                 else:
                     args = await asyncio.to_thread(self.extractor.extract, routed.message, self.expert)
                 validate_args(args, self.expert.parameters)
-                out = await asyncio.to_thread(self.expert.run, args)
+                result = await asyncio.to_thread(self.expert.run, args)
+                if isinstance(result, dict):  # rich result: {"text": ..., "files": [...]}
+                    out, attachments = result.get("text", ""), result.get("files", [])
+                else:
+                    out = result
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
             out = f"Expert '{self.expert.name}' failed: {error}"
         await ctx.yield_output(ExpertResult(self.expert.name, args, out, extractor,
-                                            (time.perf_counter() - start) * 1000, error))
+                                            (time.perf_counter() - start) * 1000, error, attachments))
 
 
 class NoMatch(Executor):
@@ -107,6 +111,15 @@ class Orchestrator:
                 .add_multi_selection_edge_group(router, [*nodes, no_match], selection_func=select)
                 .build())
 
+    @staticmethod
+    def _trace_results(outputs: list[ExpertResult]) -> list[dict]:
+        """Traces keep routing facts, not file contents: drop previews from attachments."""
+        rows = [asdict(o) for o in outputs]
+        for r in rows:
+            for a in r.get("attachments", []):
+                a.pop("preview", None)
+        return rows
+
     async def ask(self, message: str) -> list[ExpertResult]:
         return (await self.ask_traced(message))[0]
 
@@ -119,7 +132,7 @@ class Orchestrator:
         if self.trace:
             self.trace.write({
                 "message": message, "engine": self.engine.name, "mode": self.mode,
-                "decisions": [asdict(d) for d in decisions], "results": [asdict(o) for o in outputs],
+                "decisions": [asdict(d) for d in decisions], "results": self._trace_results(outputs),
                 "total_ms": (time.perf_counter() - start) * 1000,
             })
         return outputs, decisions

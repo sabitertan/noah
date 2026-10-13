@@ -9,10 +9,13 @@ ifeq ($(RUNTIME),podman)
 export PODMAN_USERNS = keep-id
 endif
 
-.PHONY: up down logs build test shell pull-models
+.PHONY: up dev down logs build test shell pull-models
 up:            ## build and start everything, UI at http://localhost:8765
 	mkdir -p traces data
 	$(COMPOSE) $(FILES) up --build
+dev:           ## like up, but mounts the source and reloads on any change (code, experts, web UI)
+	mkdir -p traces data
+	$(COMPOSE) $(FILES) -f compose.dev.yaml up --build
 down:          ## stop and remove containers (models volume is kept)
 	$(COMPOSE) $(FILES) down
 logs:

@@ -1,0 +1,12 @@
+# Dev override: mounts the source and reloads uvicorn on any change (Python, YAML, and the web UI).
+#   make dev      (or: docker compose -f compose.yaml -f compose.dev.yaml up --build)
+# After a change the browser still needs a normal refresh (F5).
+services:
+  noah:
+    volumes:
+      - ./noah:/app/noah:z
+      - ./experts:/app/experts:z
+    command: ["uvicorn", "noah.server:app", "--host", "0.0.0.0", "--port", "8765", "--reload",
+              "--reload-dir", "/app/noah", "--reload-dir", "/app/experts",
+              "--reload-include", "*.yaml", "--reload-include", "*.js",
+              "--reload-include", "*.css", "--reload-include", "*.html"]

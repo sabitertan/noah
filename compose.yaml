@@ -40,15 +40,10 @@ services:
       - "8765:8765"
     environment:
       NOAH_LLM_URL: http://ollama:11434
-    # Live-edit: code, experts and data are mounted, uvicorn reloads on change.
+    # Persisted state. For live-editing code, use the dev override:  make dev
     volumes:
-      - ./noah:/app/noah:z
-      - ./experts:/app/experts:z
       - ./data:/app/data:z
       - ./traces:/app/traces:z
-    command: ["uvicorn", "noah.server:app", "--host", "0.0.0.0", "--port", "8765", "--reload",
-              "--reload-dir", "/app/noah", "--reload-dir", "/app/experts",
-              "--reload-include", "*.yaml"]
 
 volumes:
   ollama:

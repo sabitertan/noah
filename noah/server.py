@@ -8,11 +8,12 @@ from dataclasses import asdict
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import filesvc
 from .engines import make_engine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
@@ -103,6 +104,19 @@ if HAS_LAYA:
                              "model": "qwen2.5:0.5b", "engine_model": "english", "threshold": 0.1})
 experts = load_experts(os.environ.get("NOAH_EXPERTS", "experts"))
 trace = TraceStore()
+DISABLED = Path(os.environ.get("NOAH_DISABLED_EXPERTS", "data/disabled_experts.json"))
+
+
+def _disabled() -> set[str]:
+    try:
+        return set(json.loads(DISABLED.read_text()))
+    except (OSError, ValueError):
+        return set()
+
+
+def _active_experts() -> dict:
+    off = _disabled()
+    return {n: e for n, e in experts.items() if n not in off}
 _engines: dict[str, object] = {}  # engines can be expensive to load (embedding), so cache them
 
 
@@ -118,7 +132,11 @@ class AskRequest(BaseModel):
 
 @app.get("/")
 def index():
-    return FileResponse(WEB / "index.html")
+    # version the asset URLs by mtime so browsers never keep a stale app.css/app.js after an update
+    ver = int(max((WEB / "static" / f).stat().st_mtime for f in ("app.css", "app.js")))
+    html = (WEB / "index.html").read_text().replace("/static/app.css", f"/static/app.css?v={ver}") \
+        .replace("/static/app.js", f"/static/app.js?v={ver}")
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -126,13 +144,20 @@ def favicon():
     return FileResponse(WEB / "static" / "favicon.svg", media_type="image/svg+xml")
 
 
+def _is_local(request: Request) -> bool:
+    """True only for a direct loopback client (no proxy headers): the machine running Noah."""
+    fwd = any(h in request.headers for h in ("x-forwarded-for", "forwarded", "x-real-ip"))
+    return bool(request.client) and request.client.host in ("127.0.0.1", "::1") and not fwd
+
+
 @app.get("/api/config")
-def config():
+def config(request: Request):
     try:
         models = [m["name"] for m in httpx.get(f"{OLLAMA}/api/tags", timeout=2).json()["models"]]
     except Exception:
         models = []
     return {
+        "local": _is_local(request),
         "engines": ["keyword", "embedding", "llm_tools", "llm_choice", *(["laya"] if HAS_LAYA else [])],
         "engine_models": {"laya": LAYA_CHECKPOINTS},  # engines whose models are not Ollama models
         "modes": ["route", "fanout"],
@@ -140,7 +165,8 @@ def config():
         "models": models,
         "experts": [{"name": e.name, "description": e.description, "license": e.license,
                      "parameters": e.parameters, "examples": e.examples,
-                     "kind": e.kind, "model": e.model.get("id", "")} for e in experts.values()],
+                     "kind": e.kind, "model": e.model.get("id", ""),
+                     "enabled": e.name not in _disabled()} for e in experts.values()],
     }
 
 
@@ -154,10 +180,25 @@ async def ask(req: AskRequest):
             kw = {"model": req.engine_model} if req.engine == "laya" else {}
         _engines[key] = make_engine(req.engine, **kw)
     kw = {"base_url": f"{OLLAMA}/v1", "model": req.model} if req.extractor == "openai_compat" else {}
-    orch = Orchestrator(experts, _engines[key], make_extractor(req.extractor, **kw), trace,
+    orch = Orchestrator(_active_experts(), _engines[key], make_extractor(req.extractor, **kw), trace,
                         mode=req.mode, threshold=req.threshold, llm_url=f"{OLLAMA}/v1")
     results, decisions = await orch.ask_traced(req.message)
     return {"results": [asdict(r) for r in results], "decisions": [asdict(d) for d in decisions]}
+
+
+class ExpertToggle(BaseModel):
+    enabled: bool
+
+
+@app.put("/api/experts/{name}")
+def toggle_expert(name: str, req: ExpertToggle):
+    if name not in experts:
+        raise HTTPException(404, f"Unknown expert '{name}'")
+    off = _disabled()
+    off.discard(name) if req.enabled else off.add(name)
+    DISABLED.parent.mkdir(parents=True, exist_ok=True)
+    DISABLED.write_text(json.dumps(sorted(off)))
+    return {"name": name, "enabled": req.enabled}
 
 
 @app.get("/api/traces")
@@ -177,3 +218,43 @@ def put_profiles(profiles: list[dict]):
     PROFILES.parent.mkdir(parents=True, exist_ok=True)
     PROFILES.write_text(json.dumps(profiles, indent=2))
     return profiles
+
+
+class OpenRequest(BaseModel):
+    path: str
+
+
+def _file_or_404(path: str):
+    try:
+        return filesvc.safe_path(path)
+    except filesvc.FileAccessError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/api/files/preview")
+def file_preview(path: str):
+    p = _file_or_404(path)
+    return {**filesvc.describe(p), "preview": filesvc.preview(p)}
+
+
+@app.get("/api/files/download")
+def file_download(path: str):
+    p = _file_or_404(path)
+    # attachment + nosniff: the browser saves the file, it never renders or executes it from our origin
+    return FileResponse(p, filename=p.name, content_disposition_type="attachment",
+                        headers={"X-Content-Type-Options": "nosniff"})
+
+
+@app.post("/api/files/open")
+def file_open(req: OpenRequest, request: Request):
+    """Open with the OS default app. Only meaningful (and only allowed) on the machine running Noah."""
+    if not _is_local(request):
+        raise HTTPException(403, "Opening in another app only works on the computer running Noah. Download the file instead.")
+    p = _file_or_404(req.path)
+    try:
+        filesvc.open_with_default_app(p)
+    except filesvc.FileAccessError as e:
+        raise HTTPException(400, str(e))
+    except OSError as e:
+        raise HTTPException(500, f"Could not start an application for this file ({e.__class__.__name__}).")
+    return {"opened": True, "name": p.name}
