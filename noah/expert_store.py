@@ -10,7 +10,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -38,8 +38,8 @@ class ExpertIn(BaseModel):
     examples: list[str] = Field(min_length=1, max_length=20)
     model: str = Field(default="", max_length=200)   # generate experts: a model reference (local name, hf:…, or:…, az:…)
     system: str = Field(default="", max_length=4000)
-    shots: list[Shot] = Field(default_factory=list, max_length=6)
-    strip: list[str] = Field(default_factory=list, max_length=10)
+    shots: list[Shot] = Field(default_factory=list[Shot], max_length=6)
+    strip: list[str] = Field(default_factory=list[str], max_length=10)
     license: str = Field(default="user", max_length=60)
 
     @field_validator("description", "license", "model", "system")
@@ -84,8 +84,8 @@ def _manifest_path(root: Path, name: str) -> Path:
     return _dir(root, name) / "expert.yaml"
 
 
-def _literal(dumper: yaml.SafeDumper, text: str):
-    return dumper.represent_scalar("tag:yaml.org,2002:str", text, style="|" if "\n" in text else None)  # multi-line prompts stay readable
+def _literal(dumper: yaml.SafeDumper, text: str) -> Any:
+    return cast(Any, dumper).represent_scalar("tag:yaml.org,2002:str", text, style="|" if "\n" in text else None)  # multi-line prompts stay readable
 
 
 class _Dumper(yaml.SafeDumper):
@@ -108,15 +108,20 @@ def _write(path: Path, data: dict[str, Any]) -> None:
             os.unlink(tmp)
 
 
+def _load(path: Path) -> dict[str, Any]:
+    data: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return cast(dict[str, Any], data) if isinstance(data, dict) else {}
+
+
 def read(root: Path, name: str) -> dict[str, Any]:
     """The manifest as the editor needs it, plus what may be changed."""
     path = _manifest_path(root, name)
     if not path.is_file():
         raise ExpertError(f"Unknown expert '{name}'", 404)
-    m = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    m = _load(path)
     kind = m.get("kind", "tool")
     return {"name": name, "kind": kind, "description": m.get("description", ""), "examples": m.get("examples", []),
-            "model": (m.get("model") or {}).get("id", ""), "system": m.get("system", ""), "shots": m.get("shots", []),
+            "model": cast(dict[str, Any], m.get("model") or {}).get("id", ""), "system": m.get("system", ""), "shots": m.get("shots", []),
             "strip": m.get("strip", []), "license": m.get("license", ""),
             "parameters": m.get("parameters", {}), "editable": "all" if kind == "generate" else "routing"}
 
@@ -147,7 +152,7 @@ def update(root: Path, name: str, body: ExpertIn) -> None:
         raise ExpertError(f"Unknown expert '{name}'", 404)
     if body.name and body.name != name:
         raise ExpertError("An expert's name cannot be changed. Create a new one and delete this one instead.")
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = _load(path)
     data["description"], data["examples"] = body.description, body.examples        # routing text: allowed for every kind
     if data.get("kind", "tool") == "generate":
         if not body.model or not body.system:
@@ -166,7 +171,7 @@ def delete(root: Path, name: str) -> None:
     path = _manifest_path(root, name)
     if not path.is_file():
         raise ExpertError(f"Unknown expert '{name}'", 404)
-    if (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("kind", "tool") != "generate":
+    if _load(path).get("kind", "tool") != "generate":
         raise ExpertError("This expert runs Python code. Delete its folder yourself if you really want it gone.")
     path.unlink()
     try:

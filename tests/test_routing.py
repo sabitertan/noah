@@ -6,6 +6,7 @@ from noah.engines import make_engine
 from noah.extractors import make_extractor
 from noah.orchestrator import Orchestrator
 from noah.registry import load_experts
+from noah.types import Expert
 
 # (message, expected expert or None for "no confident match")
 LABELLED = [
@@ -44,12 +45,12 @@ LABELLED = [
 
 
 @pytest.fixture(scope="module")
-def experts():
+def experts() -> dict[str, Expert]:
     return load_experts("experts")
 
 
 @pytest.mark.parametrize("engine_name", ["keyword", "embedding"])
-def test_routing_accuracy(experts, engine_name):
+def test_routing_accuracy(experts: dict[str, Expert], engine_name: str) -> None:
     engine = make_engine(engine_name)
     hits = [engine.decide(m, experts)[0].expert == want for m, want in LABELLED]
     acc = sum(hits) / len(hits)
@@ -61,7 +62,7 @@ def test_routing_accuracy(experts, engine_name):
             assert engine.decide(m, experts)[0].expert == want, m
 
 
-def test_engine_swap_changes_nothing_else(experts):
+def test_engine_swap_changes_nothing_else(experts: dict[str, Expert]) -> None:
     """Same orchestrator + extractor code runs with either engine."""
     for name in ("keyword", "embedding"):
         orch = Orchestrator(experts, make_engine(name), make_extractor("rule"), threshold=0.0)
@@ -69,19 +70,19 @@ def test_engine_swap_changes_nothing_else(experts):
         assert out[0].expert == "calc" and "42" in out[0].output
 
 
-def test_no_match_below_threshold(experts):
+def test_no_match_below_threshold(experts: dict[str, Expert]) -> None:
     orch = Orchestrator(experts, make_engine("keyword"), make_extractor("rule"), threshold=0.25)
     assert asyncio.run(orch.ask("xyzzy plugh"))[0].expert == "no_match"
 
 
-def test_fanout_runs_multiple_experts(experts):
+def test_fanout_runs_multiple_experts(experts: dict[str, Expert]) -> None:
     orch = Orchestrator(experts, make_engine("keyword"), make_extractor("rule"), mode="fanout",
                         threshold=0.1, fanout_margin=0.2)
     names = {r.expert for r in asyncio.run(orch.ask("calculate 2 + 2 and find my budget file"))}
     assert {"calc", "files"} <= names
 
 
-def test_bad_args_reported_not_raised(experts):
+def test_bad_args_reported_not_raised(experts: dict[str, Expert]) -> None:
     orch = Orchestrator(experts, make_engine("keyword"), make_extractor("rule"), threshold=0.0)
     out = asyncio.run(orch.ask("weather"))  # no city -> rule extractor returns {} -> validation error
     assert out[0].error and "city" in out[0].error
@@ -90,7 +91,7 @@ def test_bad_args_reported_not_raised(experts):
 OFF_TOPIC = ["tell me a joke", "who won the world cup in 2010", "what's the capital of Australia", "hello there"]
 
 
-def test_embedding_declines_off_topic_at_default_threshold(experts):
+def test_embedding_declines_off_topic_at_default_threshold(experts: dict[str, Expert]) -> None:
     """The default profile's threshold (0.63) must separate chit-chat from every labelled in-domain message."""
     engine = make_engine("embedding")
     assert all(engine.decide(m, experts)[0].score >= 0.63 for m, _ in LABELLED)

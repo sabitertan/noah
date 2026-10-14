@@ -15,3 +15,5 @@ data/hf_token
 data/openrouter_key
 data/azure_key
 data/azure_foundry.json
+
+.vscode/

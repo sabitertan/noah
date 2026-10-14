@@ -20,9 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "playwright>=1.45"]
+dev = ["pytest>=8", "httpx2", "pyright", "playwright>=1.45"]  # httpx2: what starlette's TestClient expects; pyright: same checks as Pylance
 laya = ["laya>=0.4"]  # Laya decision engine (pulls torch + transformers; not in the image or desktop build)
-container = ["pytest>=8", "watchfiles>=0.21"]  # what the dev image adds: tests + live reload
+container = ["pytest>=8", "httpx2", "watchfiles>=0.21"]  # what the dev image adds: tests + live reload
 
 [project.scripts]
 noah = "noah.cli:main"
@@ -35,3 +35,7 @@ noah = ["web/dist/*", "web/dist/assets/*", "web/dist/licenses/*"]  # the built U
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.pyright]  # Pylance in VS Code and the pyright CLI both read this
+include = ["noah", "experts", "tests", "scripts", "desktop/build_sidecar.py", "desktop/sidecar/noah_server.py"]
+typeCheckingMode = "strict"

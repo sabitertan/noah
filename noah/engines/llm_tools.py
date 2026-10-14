@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 import json
 import re
 
@@ -11,9 +12,9 @@ _FG_CALL = re.compile(r"call:(\w+)\{(.*?)(?:\}|<end_function_call>|$)", re.S)  #
 _FG_PARAM = re.compile(r"(\w+):(?:<escape>(.*?)<escape>|([^,}]*))", re.S)
 
 
-def expert_tools(experts: dict[str, Expert]) -> list[dict]:
+def expert_tools(experts: dict[str, Expert]) -> list[dict[str, Any]]:
     """Experts as OpenAI-style tools, plus an explicit 'none' so the model can decline."""
-    tools = []
+    tools: list[dict[str, Any]] = []
     for e in experts.values():
         params = e.parameters if e.parameters.get("properties") else {
             "type": "object", "properties": {"request": {"type": "string", "description": "the user's request"}},
@@ -25,11 +26,11 @@ def expert_tools(experts: dict[str, Expert]) -> list[dict]:
     return tools
 
 
-def parse_functiongemma(text: str) -> list[tuple[str, dict]]:
+def parse_functiongemma(text: str) -> list[tuple[str, dict[str, Any]]]:
     """FunctionGemma emits `call:name{key:<escape>value<escape>,n:3}` as plain text."""
-    calls = []
+    calls: list[tuple[str, dict[str, Any]]] = []
     for name, body in _FG_CALL.findall(text or ""):
-        args = {}
+        args: dict[str, Any] = {}
         for key, escaped, bare in _FG_PARAM.findall(body):
             val = escaped if escaped or not bare.strip() else bare.strip()
             try:
@@ -50,11 +51,12 @@ class LLMToolsEngine:
         self.base_url, self.model, self.timeout = base_url.rstrip("/"), model, timeout
         self.name = "llm_tools"
 
-    def _calls(self, message: str, experts: dict[str, Expert]) -> list[tuple[str, dict]]:
+    def _calls(self, message: str, experts: dict[str, Expert]) -> list[tuple[str, dict[str, Any]]]:
         msg = chat(self.base_url, {
             "model": self.model, "temperature": 0, "tools": expert_tools(experts),
             "messages": [{"role": "user", "content": message}]}, self.timeout)["choices"][0]["message"]
-        native = [(c["function"]["name"], c["function"]["arguments"]) for c in msg.get("tool_calls") or []]
+        tool_calls: list[dict[str, Any]] = msg.get("tool_calls") or []
+        native: list[tuple[str, Any]] = [(c["function"]["name"], c["function"]["arguments"]) for c in tool_calls]
         if native:
             return [(n, json.loads(a) if isinstance(a, str) else (a or {})) for n, a in native]
         return parse_functiongemma(msg.get("content") or "")

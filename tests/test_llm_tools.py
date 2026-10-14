@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any, Callable
 
 import httpx
 import pytest
@@ -7,21 +8,22 @@ from noah.engines.llm_tools import LLMToolsEngine, expert_tools, parse_functiong
 from noah.extractors import make_extractor
 from noah.orchestrator import Orchestrator
 from noah.registry import load_experts
+from noah.types import Expert
 
 
 @pytest.fixture(scope="module")
-def experts():
+def experts() -> dict[str, Expert]:
     return load_experts("experts")
 
 
-def fake_post(content=None, tool_calls=None):
-    def post(url, json=None, timeout=None):
+def fake_post(content: str | None = None, tool_calls: list[dict[str, Any]] | None = None) -> Callable[..., httpx.Response]:
+    def post(url: str, json: Any = None, timeout: Any = None) -> httpx.Response:
         body = {"choices": [{"message": {"content": content, "tool_calls": tool_calls}}]}
         return httpx.Response(200, json=body, request=httpx.Request("POST", url))
     return post
 
 
-def test_parse_functiongemma_forms():
+def test_parse_functiongemma_forms() -> None:
     assert parse_functiongemma("call:weather{city:<escape>Paris<escape>") == [("weather", {"city": "Paris"})]  # truncated
     assert parse_functiongemma("<start_function_call>call:calc{expression:<escape>1+2<escape>}<end_function_call>") == [
         ("calc", {"expression": "1+2"})]
@@ -29,14 +31,14 @@ def test_parse_functiongemma_forms():
     assert parse_functiongemma("Sorry, I cannot help") == []
 
 
-def test_tools_include_none_and_synthesize_request_param(experts):
+def test_tools_include_none_and_synthesize_request_param(experts: dict[str, Expert]) -> None:
     tools = {t["function"]["name"]: t["function"] for t in expert_tools(experts)}
     assert "none" in tools
     assert "request" in tools["csharp"]["parameters"]["properties"]  # generate experts have no params of their own
     assert "city" in tools["weather"]["parameters"]["properties"]
 
 
-def test_engine_native_tool_calls_and_none(experts, monkeypatch):
+def test_engine_native_tool_calls_and_none(experts: dict[str, Expert], monkeypatch: pytest.MonkeyPatch) -> None:
     calls = [{"function": {"name": "weather", "arguments": '{"city": "Oslo"}'}}]
     monkeypatch.setattr(httpx, "post", fake_post(tool_calls=calls))
     d = LLMToolsEngine(model="m").decide("weather in Oslo", experts)
@@ -47,26 +49,26 @@ def test_engine_native_tool_calls_and_none(experts, monkeypatch):
     assert all(x.score == 0.0 for x in LLMToolsEngine(model="m").decide("joke", experts))
 
 
-def test_engine_functiongemma_text_format(experts, monkeypatch):
+def test_engine_functiongemma_text_format(experts: dict[str, Expert], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "post", fake_post(content="<start_function_call>call:calc{expression:<escape>2+2<escape>}"))
     d = LLMToolsEngine(model="m").decide("2+2", experts)
     assert d[0].expert == "calc" and d[0].args == {"expression": "2+2"}
 
 
-def test_orchestrator_uses_model_supplied_args_and_skips_extractor(experts, monkeypatch):
+def test_orchestrator_uses_model_supplied_args_and_skips_extractor(experts: dict[str, Expert], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "post", fake_post(tool_calls=[{"function": {"name": "calc", "arguments": '{"expression": "6*7"}'}}]))
     orch = Orchestrator(experts, LLMToolsEngine(model="m"), make_extractor("rule"))
     out = asyncio.run(orch.ask("whatever the user typed"))
     assert out[0].expert == "calc" and out[0].extractor == "orchestrator" and "42" in out[0].output
 
 
-def test_no_expert_called_gives_no_match(experts, monkeypatch):
+def test_no_expert_called_gives_no_match(experts: dict[str, Expert], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "post", fake_post(content="I cannot help with that"))
     orch = Orchestrator(experts, LLMToolsEngine(model="m"), make_extractor("rule"))
     assert asyncio.run(orch.ask("tell me a joke"))[0].expert == "no_match"
 
 
-def test_launch_token_guard(monkeypatch):
+def test_launch_token_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     """Desktop mode: no token or wrong Host header -> 401; right cookie + loopback Host -> 200."""
     from fastapi.testclient import TestClient
 
@@ -84,12 +86,12 @@ def test_launch_token_guard(monkeypatch):
         "/api/config", headers={"Authorization": "Bearer s3cret"}).status_code == 200
 
 
-def test_pid_alive_posix():
+def test_pid_alive_posix() -> None:
     import os
     import subprocess
     import sys
 
-    from noah.server import _pid_alive
+    from noah.server import _pid_alive  # pyright: ignore[reportPrivateUsage]  (testing the helper itself)
 
     assert _pid_alive(os.getpid())
     p = subprocess.Popen([sys.executable, "-c", "pass"])

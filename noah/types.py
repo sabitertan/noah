@@ -18,8 +18,8 @@ class Expert:
     extract_rule: Callable[[str], dict[str, Any]] | None = None
     kind: str = "tool"  # "tool": extract args then call tool.py; "generate": the expert's own model answers
     system: str = ""  # system prompt for generate experts
-    strip: list[str] = field(default_factory=list)  # regexes removed from generated output (hard domain guard)
-    shots: list[dict] = field(default_factory=list)  # few-shot user/assistant pairs that pin the output style
+    strip: list[str] = field(default_factory=list[str])  # regexes removed from generated output (hard domain guard)
+    shots: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])  # few-shot user/assistant pairs that pin the output style
 
     @property
     def card_text(self) -> str:
@@ -39,7 +39,7 @@ class Routed:
 
     message: str
     decisions: list[Decision]
-    selected: list[str] = field(default_factory=list)
+    selected: list[str] = field(default_factory=list[str])
 
 
 @dataclass
@@ -50,4 +50,4 @@ class ExpertResult:
     extractor: str
     latency_ms: float
     error: str | None = None
-    attachments: list[dict[str, Any]] = field(default_factory=list)  # e.g. files the user can open or download
+    attachments: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])  # e.g. files the user can open or download

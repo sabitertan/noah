@@ -22,8 +22,9 @@ import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any, Callable
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
 HF_TOKEN, OR_KEY, AZ_KEY, ENTRA = "hf_good_token_123", "sk-or-v1-good_key_1234", "azure-good-key-123456", "entra-token-from-cli"
@@ -31,7 +32,7 @@ HF_TOKEN, OR_KEY, AZ_KEY, ENTRA = "hf_good_token_123", "sk-or-v1-good_key_1234",
 
 # ------------------------------------------------------------------ the stub
 class Stub(BaseHTTPRequestHandler):
-    log: list = []
+    log: list[dict[str, Any]] = []
     tags = ["qwen2.5:0.5b", "qwen2.5-coder:1.5b"]
     router = {"data": [
         {"id": "Qwen/Qwen2.5-7B-Instruct", "providers": [{"provider": "a", "status": "live", "supports_tools": True, "supports_structured_output": True,
@@ -45,17 +46,17 @@ class Stub(BaseHTTPRequestHandler):
     azure_ok = (f"Bearer {AZ_KEY}", f"Bearer {ENTRA}")
     azure_deployments = ("my-gpt",)
 
-    def log_message(self, *a):
+    def log_message(self, format: str, *args: Any) -> None:
         pass
 
-    def reply(self, code, body):
+    def reply(self, code: int, body: Any) -> None:
         raw = json.dumps(body).encode()
         self.send_response(code); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(raw)))
         self.end_headers(); self.wfile.write(raw)
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         p, auth = self.path.split("?")[0], self.headers.get("Authorization")
-        routes = {
+        routes: dict[str, Callable[[], None]] = {
             "/__log": lambda: self.reply(200, Stub.log),
             "/ollama/api/tags": lambda: self.reply(200, {"models": [{"name": n} for n in Stub.tags]}),
             "/router/v1/models": lambda: self.reply(200, Stub.router),
@@ -69,8 +70,8 @@ class Stub(BaseHTTPRequestHandler):
             return self.reply(200, {"siblings": [{"rfilename": "Qwen3-4B-Q4_K_M.gguf", "size": 2500000000}, {"rfilename": "Qwen3-4B-Q8_0.gguf", "size": 4300000000}]})
         routes.get(p, lambda: self.reply(404, {}))()
 
-    def do_POST(self):
-        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+    def do_POST(self) -> None:
+        body: dict[str, Any] = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         p, auth = self.path, self.headers.get("Authorization")
         if p == "/ollama/api/pull":
             Stub.log.append({"pull": body.get("model")})
@@ -94,31 +95,43 @@ class Stub(BaseHTTPRequestHandler):
         self.reply(404, {})
 
 
-def free_port():
+def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
 # ------------------------------------------------------------------ the checks
-failures = []
+failures: list[str] = []
 
 
-def check(name, ok, detail=""):
+def check(name: str, ok: bool, detail: str = "") -> None:
     print(("PASS " if ok else "FAIL ") + name + (f"  {detail}" if detail and not ok else ""))
     if not ok:
         failures.append(name)
 
 
-def run_checks(pg, base, stub_url, data: Path, has_az_cli: bool, shots: Path | None):
-    log = lambda: json.load(urllib.request.urlopen(f"{stub_url}/__log"))
-    calls = lambda path, **match: [e for e in log() if e.get("path") == path and all(e.get(k) == v for k, v in match.items())]
-    tab = lambda name: (pg.click(f"[data-tab={name}]"), pg.wait_for_selector(f"[data-tab={name}].active"))
-    nav = lambda v: pg.click(f"[data-view={v}]")
-    shot = lambda n: pg.screenshot(path=str(shots / n)) if shots else None
-    answers = lambda: pg.locator(".a .body").count()
+def run_checks(pg: Page, base: str, stub_url: str, data: Path, has_az_cli: bool, shots: Path | None) -> None:
+    def log() -> list[dict[str, Any]]:
+        return json.load(urllib.request.urlopen(f"{stub_url}/__log"))
 
-    def ask(text):
+    def calls(path: str, **match: Any) -> list[dict[str, Any]]:
+        return [e for e in log() if e.get("path") == path and all(e.get(k) == v for k, v in match.items())]
+
+    def tab(name: str) -> None:
+        pg.click(f"[data-tab={name}]"); pg.wait_for_selector(f"[data-tab={name}].active")
+
+    def nav(v: str) -> None:
+        pg.click(f"[data-view={v}]")
+
+    def shot(n: str) -> None:
+        if shots:
+            pg.screenshot(path=str(shots / n))
+
+    def answers() -> int:
+        return pg.locator(".a .body").count()
+
+    def ask(text: str) -> str:
         n = answers()
         pg.fill("#msg", text); pg.press("#msg", "Enter")
         pg.wait_for_function(f"document.querySelectorAll('.a .body').length > {n}", timeout=60000)
@@ -158,7 +171,7 @@ def run_checks(pg, base, stub_url, data: Path, has_az_cli: bool, shots: Path | N
     cards.nth(0).click(); pg.fill("#f-name", "discard me"); cards.nth(1).click()
     check("switching cards drops the draft", "discard me" not in pg.inner_text("#orchPanel .cards"))
     pg.click("[data-new]"); pg.wait_for_timeout(400)
-    check("new orchestrator is added and selected", cards.count() == n + 1 and "sel" in cards.last.get_attribute("class"))
+    check("new orchestrator is added and selected", cards.count() == n + 1 and "sel" in (cards.last.get_attribute("class") or ""))
     pg.fill("#f-name", "Renamed live"); pg.click("#f-save"); pg.wait_for_timeout(300)
     check("duplicate name refused", "already an orchestrator" in pg.inner_text("#orchMsg"))
     before = pg.locator(".item[data-view=orch] .meta").inner_text()
@@ -335,7 +348,7 @@ def run_checks(pg, base, stub_url, data: Path, has_az_cli: bool, shots: Path | N
     nav("traces"); pg.wait_for_timeout(600); check("traces are listed", pg.locator("#tracesPanel tbody tr").count() >= 1)
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--shots", type=Path, help="also save a few screenshots here")
     args = ap.parse_args()
@@ -378,7 +391,7 @@ def main():
             with sync_playwright() as p:
                 browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM") or None, args=["--no-sandbox"])
                 pg = browser.new_page(viewport={"width": 1280, "height": 900})
-                problems = []
+                problems: list[str] = []
                 pg.on("pageerror", lambda e: problems.append(str(e)))
                 pg.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
                 run_checks(pg, f"http://127.0.0.1:{port}/", stub_url, data, has_az_cli, args.shots)

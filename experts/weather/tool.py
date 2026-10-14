@@ -1,20 +1,21 @@
+from typing import Any
 import json
 import re
 import urllib.parse
 import urllib.request
 
 
-def _get(url: str) -> dict:
+def _get(url: str) -> dict[str, Any]:
     with urllib.request.urlopen(url, timeout=8) as r:
         return json.load(r)
 
 
-def extract_rule(message: str) -> dict:
+def extract_rule(message: str) -> dict[str, Any]:
     m = re.search(r"\b(?:in|for|at)\s+([A-Za-z][A-Za-z .'-]+?)(?:\s+(?:today|tomorrow|now|right now))?\s*[?.!]*$", message.strip())
     return {"city": m.group(1).strip()} if m else {}
 
 
-def run(args: dict) -> str:
+def run(args: dict[str, Any]) -> str:
     geo = _get("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + urllib.parse.quote(args["city"]))
     if not geo.get("results"):
         return f"Could not find a place called {args['city']}."

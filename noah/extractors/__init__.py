@@ -24,7 +24,7 @@ def validate_args(args: dict[str, Any], schema: dict[str, Any]) -> None:
             raise ValueError(f"argument {key} should be {prop['type']}")
 
 
-def make_extractor(name: str, **kwargs) -> ArgExtractor:
+def make_extractor(name: str, **kwargs: Any) -> ArgExtractor:
     from .openai_compat import OpenAICompatExtractor
     from .rule import RuleExtractor
 

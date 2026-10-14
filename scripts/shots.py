@@ -1,12 +1,13 @@
 """Drive the UI with the system Chromium and save screenshots + console errors."""
 import sys
+
 from playwright.sync_api import sync_playwright
 
 out = sys.argv[1] if len(sys.argv) > 1 else "research/shots"
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path="/snap/bin/chromium", args=["--no-sandbox"])
     pg = b.new_page(viewport={"width": 1280, "height": 800})
-    errs = []
+    errs: list[str] = []
     pg.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
     pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto("http://localhost:8765/"); pg.wait_for_timeout(800)

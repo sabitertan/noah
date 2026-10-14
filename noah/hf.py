@@ -5,6 +5,7 @@ The token is write-only: the API says whether one is set, never what it is.
 """
 from __future__ import annotations
 
+from typing import Any, Callable, TypeVar
 import json
 import os
 import re
@@ -33,14 +34,15 @@ router, my_models, status = _hosted.router, _hosted.my_models, _hosted.status
 REPO = re.compile(r"^[\w.\-]+/[\w.\-]+$")
 QUANT = re.compile(r"^[\w.\-]+$")
 QUANT_IN_NAME = re.compile(r"(?<![A-Za-z0-9])((?:UD-)?(?:IQ\d(?:_[A-Z0-9]+)*|Q\d(?:_[A-Z0-9]+)*|BF16|F16|F32))(?![A-Za-z0-9])", re.I)
-_cache: dict[str, tuple[float, object]] = {}
+T = TypeVar("T")
+_cache: dict[str, tuple[float, Any]] = {}
 
 
 def ollama_url() -> str:
     return os.environ.get("NOAH_LLM_URL", "http://localhost:11434")
 
 
-def _cached(key: str, ttl: float, fetch):
+def _cached(key: str, ttl: float, fetch: Callable[[], T]) -> T:
     hit = _cache.get(key)
     if hit and time.time() - hit[0] < ttl:
         return hit[1]
@@ -49,12 +51,12 @@ def _cached(key: str, ttl: float, fetch):
     return value
 
 
-def _hosted_models() -> list[dict]:
+def _hosted_models() -> list[dict[str, Any]]:
     """Models the Inference Providers router can run, boiled down to what a user needs to choose."""
-    def fetch():
+    def fetch() -> list[dict[str, Any]]:
         r = httpx.get(f"{llm.HF_ROUTER}/models", timeout=15)
         r.raise_for_status()
-        out = []
+        out: list[dict[str, Any]] = []
         for m in r.json().get("data", []):
             live = [p for p in m.get("providers", []) if p.get("status") == "live"]
             prices = [p["pricing"]["input"] for p in live if p.get("pricing")]

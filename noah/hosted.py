@@ -11,7 +11,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -34,11 +34,11 @@ class ModelBody(BaseModel):
 class Hosted:
     router: APIRouter
     my_models: Callable[[], list[str]]   # bare ids, no prefix
-    status: Callable[[], dict]
+    status: Callable[[], dict[str, Any]]
 
 
 def make(p: llm.Provider, validate: Callable[[TokenBody], str], *, save_credentials: Callable[[TokenBody], None] | None = None,
-         clear_credentials: Callable[[], None] | None = None, status_fn: Callable[[], dict] | None = None) -> Hosted:
+         clear_credentials: Callable[[], None] | None = None, status_fn: Callable[[], dict[str, Any]] | None = None) -> Hosted:
     """`validate(body)` returns the account name or raises HTTPException when the provider rejects the credentials.
     The hooks let a provider with more than a key (Azure: an endpoint and a sign-in method) store and report its own settings."""
     router = APIRouter(prefix=f"/api/{p.key}")
@@ -55,36 +55,35 @@ def make(p: llm.Provider, validate: Callable[[TokenBody], str], *, save_credenti
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps(ids, indent=1))
 
-    def key_status() -> dict:
+    def key_status() -> dict[str, Any]:
         secret, source = llm.token(p)
         return {"configured": bool(secret), "source": source}
     status = status_fn or key_status
 
-    def listing() -> dict:
+    def listing() -> dict[str, Any]:
         return {"models": [p.prefix + m for m in my_models()]}
 
-    @router.get("/status")
-    def get_status():
+    def get_status() -> dict[str, Any]:
         return status()
 
-    @router.put("/token")
-    def put_token(body: TokenBody):
+    def put_token(body: TokenBody) -> dict[str, Any]:
         body.token = body.token.strip()
         if body.auth != "cli" and (not 8 <= len(body.token) <= 300 or re.search(r"\s", body.token)):
             raise HTTPException(400, f"That does not look like a {p.label} {p.secret}.")
         name = validate(body)
-        (save_credentials or (lambda b: llm.save_token(b.token, p)))(body)
+        if save_credentials:
+            save_credentials(body)
+        else:
+            llm.save_token(body.token, p)
         return {**status(), "name": name}
 
-    @router.delete("/token")
-    def delete_token():
+    def delete_token() -> dict[str, Any]:
         if status().get("source") == "env":
             raise HTTPException(400, f"The {p.secret} comes from the {p.envs[0]} environment variable; unset it there.")
         (clear_credentials or (lambda: llm.clear_token(p)))()
         return status()
 
-    @router.post("/my")
-    def add_my(body: ModelBody):
+    def add_my(body: ModelBody) -> dict[str, Any]:
         mid = body.id.strip()
         if mid.startswith(p.prefix):
             mid = mid[len(p.prefix):]
@@ -95,13 +94,11 @@ def make(p: llm.Provider, validate: Callable[[TokenBody], str], *, save_credenti
             save([*ids, mid])
         return listing()
 
-    @router.delete("/my/{model_id:path}")
-    def remove_my(model_id: str):
+    def remove_my(model_id: str) -> dict[str, Any]:
         save([m for m in my_models() if m != model_id])
         return listing()
 
-    @router.post("/test")
-    def test(body: ModelBody):
+    def test(body: ModelBody) -> dict[str, Any]:
         """One tiny request, so the user knows the key and model work before wiring them into an orchestrator."""
         mid = body.id[len(p.prefix):] if body.id.startswith(p.prefix) else body.id
         if not p.id_re.match(mid):
@@ -117,4 +114,11 @@ def make(p: llm.Provider, validate: Callable[[TokenBody], str], *, save_credenti
         except (httpx.HTTPError, KeyError, ValueError):
             return {"ok": False, "error": f"Could not reach {p.label}."}
 
+    # registered explicitly (not with decorators) so the type checker sees these closures are used
+    router.add_api_route("/status", get_status, methods=["GET"])
+    router.add_api_route("/token", put_token, methods=["PUT"])
+    router.add_api_route("/token", delete_token, methods=["DELETE"])
+    router.add_api_route("/my", add_my, methods=["POST"])
+    router.add_api_route("/my/{model_id:path}", remove_my, methods=["DELETE"])
+    router.add_api_route("/test", test, methods=["POST"])
     return Hosted(router, my_models, status)

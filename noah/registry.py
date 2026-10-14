@@ -18,6 +18,8 @@ def load_experts(root: str | Path) -> dict[str, Expert]:
         if kind == "tool":
             tool_path = manifest_path.parent / manifest.get("tool", "tool.py")
             spec = importlib.util.spec_from_file_location(f"noah_expert_{manifest['name']}", tool_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"cannot load {tool_path}")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
         experts[manifest["name"]] = Expert(

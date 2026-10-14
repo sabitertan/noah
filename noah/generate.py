@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 import re
 
 from .llm import chat
@@ -7,7 +8,7 @@ from .types import Expert
 
 
 def generate(base_url: str, model: str, system: str, message: str, timeout: float = 180.0,
-             max_tokens: int = 700, shots: list[dict] | None = None) -> str:
+             max_tokens: int = 700, shots: list[dict[str, Any]] | None = None) -> str:
     """Ask a small model behind an OpenAI-compatible server to answer directly."""
     body = {"model": model, "temperature": 0.2, "max_tokens": max_tokens, "messages": [
         *([{"role": "system", "content": system}] if system else []),

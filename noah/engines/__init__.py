@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
 from .base import DecisionEngine
 from .keyword import KeywordEngine
 
 
-def make_engine(name: str, **kwargs) -> DecisionEngine:
+def make_engine(name: str, **kwargs: Any) -> DecisionEngine:
     if name == "keyword":
         return KeywordEngine()
     if name == "embedding":

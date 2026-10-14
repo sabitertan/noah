@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any, cast
 
 from ..types import Decision, Expert
 from .llm_choice import QUESTION, expert_options
@@ -20,13 +21,14 @@ class LayaEngine:
     def __init__(self, model: str = ""):
         os.environ.setdefault("USE_TF", "0")  # a TensorFlow install can deadlock transformers model construction
         try:
-            from laya import Router
+            from laya import Router  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
         except ImportError as e:
             raise RuntimeError('the laya engine needs the optional dependency: pip install -e ".[laya]"') from e
-        self._router = Router()
-        self.checkpoint = None if model in ("", "auto") else model
+        router = cast(Any, Router())
+        self._router: Any = router
+        self.checkpoint: str | None = None if model in ("", "auto") else model
         if self.checkpoint:
-            self._router.preload([self.checkpoint])
+            router.preload([self.checkpoint])
 
     def decide(self, message: str, experts: dict[str, Expert]) -> list[Decision]:
         # descriptions only: options share a fixed token budget, and adding examples dropped routing from 24/28 to 8/28

@@ -3,6 +3,8 @@ import contextlib
 import json
 import stat
 import sys
+from pathlib import Path
+from typing import Any, Generator, Iterator
 
 import httpx
 import pytest
@@ -11,75 +13,68 @@ from fastapi.testclient import TestClient
 from noah import hf, llm, server
 from noah.extractors.openai_compat import OpenAICompatExtractor
 from noah.registry import load_experts
+from tests.fakes import HttpCall, anycall, http, reply, resp
 
 TOKEN = "hf_secret_token_value"
 
 
-def resp(status=200, body=None, url="http://x/"):
-    return httpx.Response(status, json=body if body is not None else {}, request=httpx.Request("POST", url))
-
-
 @pytest.fixture
-def env(tmp_path, monkeypatch):
+def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.delenv("HUGGING_FACE_HUB_TOKEN", raising=False)
     monkeypatch.setenv("NOAH_HF_TOKEN_FILE", str(tmp_path / "hf_token"))
     monkeypatch.setenv("NOAH_HF_MODELS", str(tmp_path / "hf_models.json"))
     monkeypatch.setattr(server, "PROFILES", tmp_path / "profiles.json")
     monkeypatch.setattr(server, "DISABLED", tmp_path / "d.json")
-    hf._cache.clear()
+    hf._cache.clear()  # pyright: ignore[reportPrivateUsage]  (start each test with an empty model-list cache)
     return tmp_path
 
 
 @pytest.fixture
-def client(env):
+def client(env: Path) -> TestClient:
     return TestClient(server.app, base_url="http://127.0.0.1:8765")
 
 
-def with_token(env):
+def with_token(env: Path):
     llm.save_token(TOKEN)
 
 
-def reply(text="ok"):
-    return {"choices": [{"message": {"content": text}}]}
-
-
 # ---- routing a model name to the right server ----
-def test_local_models_are_untouched(env, monkeypatch):
-    seen = {}
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: seen.update(url=url, kw=kw) or resp(body=reply()))
+def test_local_models_are_untouched(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(httpx, "post", http(lambda url, **kw: seen.update(url=url, kw=kw) or resp(body=reply())))
     llm.chat("http://localhost:11434/v1", {"model": "qwen2.5:0.5b"}, 5)
     assert seen["url"] == "http://localhost:11434/v1/chat/completions"
     assert seen["kw"]["json"]["model"] == "qwen2.5:0.5b" and "headers" not in seen["kw"]
 
 
-def test_hosted_model_goes_to_the_router_with_the_token(env, monkeypatch):
+def test_hosted_model_goes_to_the_router_with_the_token(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     with_token(env)
-    seen = {}
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: seen.update(url=url, kw=kw) or resp(body=reply()))
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(httpx, "post", http(lambda url, **kw: seen.update(url=url, kw=kw) or resp(body=reply())))
     llm.chat("http://localhost:11434/v1", {"model": "hf:Qwen/Qwen2.5-7B-Instruct:fastest"}, 5)
     assert seen["url"] == llm.HF_ROUTER + "/chat/completions"
     assert seen["kw"]["json"]["model"] == "Qwen/Qwen2.5-7B-Instruct:fastest"      # prefix stripped, suffix kept
     assert seen["kw"]["headers"] == {"Authorization": f"Bearer {TOKEN}"}
 
 
-def test_hosted_model_without_a_token_says_so(env, monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *a, **k: pytest.fail("must not call out without a token"))
+def test_hosted_model_without_a_token_says_so(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(httpx, "post", anycall(lambda *a, **k: pytest.fail("must not call out without a token")))
     with pytest.raises(llm.LLMError, match="token"):
         llm.chat("", {"model": "hf:Qwen/Qwen2.5-7B-Instruct"}, 5)
 
 
 @pytest.mark.parametrize("status,words", [(401, "rejected the token"), (402, "credits"), (403, "permission"),
                                           (404, "not available"), (429, "rate limiting")])
-def test_hosted_errors_are_explained_and_never_leak_the_token(env, monkeypatch, status, words):
+def test_hosted_errors_are_explained_and_never_leak_the_token(env: Path, monkeypatch: pytest.MonkeyPatch, status: int, words: str) -> None:
     with_token(env)
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: resp(status, {"error": "x"}, url))
+    monkeypatch.setattr(httpx, "post", http(lambda url, **kw: resp(status, {"error": "x"}, url)))
     with pytest.raises(llm.LLMError) as e:
         llm.chat("", {"model": "hf:org/model"}, 5)
     assert words in str(e.value) and TOKEN not in str(e.value) and e.value.status == status
 
 
-def test_env_token_wins_over_the_file(env, monkeypatch):
+def test_env_token_wins_over_the_file(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     with_token(env)
     monkeypatch.setenv("HF_TOKEN", "hf_from_env")
     assert llm.token() == ("hf_from_env", "env")
@@ -89,11 +84,11 @@ def test_env_token_wins_over_the_file(env, monkeypatch):
 EXPERT = next(iter(load_experts("experts").values()))
 
 
-def test_extractor_tries_tool_calls_when_the_provider_lacks_structured_output(env, monkeypatch):
+def test_extractor_tries_tool_calls_when_the_provider_lacks_structured_output(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     with_token(env)
-    calls = []
+    calls: list[dict[str, Any]] = []
 
-    def post(url, **kw):
+    def post(url: str, **kw: Any) -> httpx.Response:
         calls.append(kw["json"])
         if "response_format" in kw["json"]:
             return resp(422, {}, url)
@@ -105,16 +100,16 @@ def test_extractor_tries_tool_calls_when_the_provider_lacks_structured_output(en
     assert isinstance(out, dict)
 
 
-def test_a_bad_token_is_not_hidden_by_the_rule_fallback(env, monkeypatch):
+def test_a_bad_token_is_not_hidden_by_the_rule_fallback(env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     with_token(env)
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: resp(401, {}, url))
+    monkeypatch.setattr(httpx, "post", http(lambda url, **kw: resp(401, {}, url)))
     with pytest.raises(llm.LLMError, match="rejected"):
         OpenAICompatExtractor(model="hf:org/model", fallback=True).extract("anything", EXPERT)
 
 
 # ---- token endpoints ----
-def test_token_is_saved_privately_and_never_returned(client, env, monkeypatch):
-    monkeypatch.setattr(httpx, "get", lambda url, **kw: resp(200, {"name": "ada"}, url))
+def test_token_is_saved_privately_and_never_returned(client: TestClient, env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(httpx, "get", http(lambda url, **kw: resp(200, {"name": "ada"}, url)))
     r = client.put("/api/hf/token", json={"token": TOKEN})
     assert r.status_code == 200 and r.json() == {"configured": True, "source": "file", "name": "ada"}
     assert TOKEN not in r.text and TOKEN not in client.get("/api/hf/status").text and TOKEN not in client.get("/api/config").text
@@ -125,14 +120,14 @@ def test_token_is_saved_privately_and_never_returned(client, env, monkeypatch):
     assert client.delete("/api/hf/token").json()["configured"] is False and not f.exists()
 
 
-def test_a_rejected_token_is_not_saved(client, env, monkeypatch):
-    monkeypatch.setattr(httpx, "get", lambda url, **kw: resp(401, {}, url))
+def test_a_rejected_token_is_not_saved(client: TestClient, env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(httpx, "get", http(lambda url, **kw: resp(401, {}, url)))
     assert client.put("/api/hf/token", json={"token": TOKEN}).status_code == 400
     assert not (env / "hf_token").exists()
     assert client.put("/api/hf/token", json={"token": "no spaces allowed here"}).status_code == 400
 
 
-def test_an_env_token_cannot_be_deleted_from_the_ui(client, monkeypatch):
+def test_an_env_token_cannot_be_deleted_from_the_ui(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HF_TOKEN", TOKEN)
     assert client.get("/api/hf/status").json() == {"configured": True, "source": "env"}
     assert client.delete("/api/hf/token").status_code == 400
@@ -148,8 +143,8 @@ ROUTER = {"data": [
 ]}
 
 
-def fake_get(router=ROUTER, hub=None, hub_status=200):
-    def get(url, **kw):
+def fake_get(router: Any = ROUTER, hub: Any = None, hub_status: int = 200) -> HttpCall:
+    def get(url: str, /, **kw: Any) -> httpx.Response:
         if url.endswith("/models") and "router" in url:
             return resp(200, router, url)
         if "/api/models/" in url:
@@ -160,7 +155,7 @@ def fake_get(router=ROUTER, hub=None, hub_status=200):
     return get
 
 
-def test_search_lists_hosted_and_gguf_separately(client, monkeypatch):
+def test_search_lists_hosted_and_gguf_separately(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "get", fake_get(hub=[{"id": "unsloth/Qwen2.5-7B-GGUF", "downloads": 9, "likes": 2}, {"id": "bad id", "downloads": 1}]))
     j = client.get("/api/hf/search", params={"q": "qwen 7b"}).json()
     assert [m["id"] for m in j["hosted"]] == ["Qwen/Qwen2.5-7B-Instruct"]
@@ -169,13 +164,13 @@ def test_search_lists_hosted_and_gguf_separately(client, monkeypatch):
     assert [m["id"] for m in j["gguf"]] == ["unsloth/Qwen2.5-7B-GGUF"] and j["error"] == ""   # malformed ids dropped
 
 
-def test_search_survives_one_source_being_down(client, monkeypatch):
+def test_search_survives_one_source_being_down(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "get", fake_get(hub_status=500))
     j = client.get("/api/hf/search", params={"q": "llama"}).json()
     assert [m["id"] for m in j["hosted"]] == ["meta-llama/Llama-3.2-1B"] and j["gguf"] == [] and "GGUF" in j["error"]
 
 
-def test_quants_sum_split_files_and_skip_projectors(client, monkeypatch):
+def test_quants_sum_split_files_and_skip_projectors(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     sib = [{"rfilename": "m-Q4_K_M.gguf", "size": 4000}, {"rfilename": "m-Q8_0-00001-of-00002.gguf", "size": 5000},
            {"rfilename": "m-Q8_0-00002-of-00002.gguf", "size": 3000}, {"rfilename": "mmproj-F16.gguf", "size": 9},
            {"rfilename": "README.md", "size": 1}]
@@ -184,23 +179,23 @@ def test_quants_sum_split_files_and_skip_projectors(client, monkeypatch):
 
 
 @pytest.mark.parametrize("repo", ["a/b/c", "../etc", "a/..", "no-slash", "evil.com:80/x"])
-def test_pull_and_quants_reject_bad_repo_ids(client, monkeypatch, repo):
-    monkeypatch.setattr(httpx, "stream", lambda *a, **k: pytest.fail("must not reach Ollama"))
+def test_pull_and_quants_reject_bad_repo_ids(client: TestClient, monkeypatch: pytest.MonkeyPatch, repo: str) -> None:
+    monkeypatch.setattr(httpx, "stream", anycall(lambda *a, **k: pytest.fail("must not reach Ollama")))
     assert client.post("/api/hf/pull", json={"repo": repo}).status_code == 400
     assert client.get("/api/hf/quants", params={"repo": repo}).status_code == 400
 
 
-def test_pull_streams_ollama_progress_and_only_asks_for_hf_models(client, monkeypatch):
-    asked = {}
+def test_pull_streams_ollama_progress_and_only_asks_for_hf_models(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: dict[str, Any] = {}
 
     class Fake:
         status_code = 200
-        def iter_lines(self):
+        def iter_lines(self) -> Iterator[str]:
             yield '{"status":"pulling","total":10,"completed":5}'
             yield '{"status":"success"}'
 
     @contextlib.contextmanager
-    def stream(method, url, **kw):
+    def stream(method: str, url: str, **kw: Any) -> Generator[Fake, None, None]:
         asked.update(url=url, json=kw["json"])
         yield Fake()
     monkeypatch.setattr(httpx, "stream", stream)
@@ -209,9 +204,9 @@ def test_pull_streams_ollama_progress_and_only_asks_for_hf_models(client, monkey
     assert asked["json"]["model"] == "hf.co/unsloth/Qwen3-4B-GGUF:Q4_K_M" and asked["url"].endswith("/api/pull")
 
 
-def test_pull_reports_ollama_being_down(client, monkeypatch):
+def test_pull_reports_ollama_being_down(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     @contextlib.contextmanager
-    def stream(*a, **k):
+    def stream(*a: Any, **k: Any) -> Generator[None, None, None]:
         raise httpx.ConnectError("down")
         yield
     monkeypatch.setattr(httpx, "stream", stream)
@@ -219,7 +214,7 @@ def test_pull_reports_ollama_being_down(client, monkeypatch):
 
 
 # ---- the user's own list of hosted models, and config ----
-def test_my_models_add_remove_and_show_in_config(client):
+def test_my_models_add_remove_and_show_in_config(client: TestClient) -> None:
     assert client.post("/api/hf/my", json={"id": "Qwen/Qwen2.5-7B-Instruct"}).status_code == 200
     client.post("/api/hf/my", json={"id": "hf:Qwen/Qwen2.5-7B-Instruct"})            # same model, prefixed: no duplicate
     client.post("/api/hf/my", json={"id": "meta-llama/Llama-3.2-1B-Instruct:cheapest"})
@@ -229,11 +224,11 @@ def test_my_models_add_remove_and_show_in_config(client):
     assert client.delete("/api/hf/my/Qwen/Qwen2.5-7B-Instruct").json()["models"] == ["hf:meta-llama/Llama-3.2-1B-Instruct:cheapest"]
 
 
-def test_test_button_reports_success_and_failure_in_plain_words(client, env, monkeypatch):
+def test_test_button_reports_success_and_failure_in_plain_words(client: TestClient, env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "token" in client.post("/api/hf/test", json={"id": "o/m"}).json()["error"]
     with_token(env)
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: resp(body=reply("ok")))
+    monkeypatch.setattr(httpx, "post", http(lambda url, **kw: resp(body=reply("ok"))))
     j = client.post("/api/hf/test", json={"id": "o/m"}).json()
     assert j["ok"] is True and j["reply"] == "ok"
-    monkeypatch.setattr(httpx, "post", lambda url, **kw: resp(402, {}, url))
+    monkeypatch.setattr(httpx, "post", http(lambda url, **kw: resp(402, {}, url)))
     assert "credits" in client.post("/api/hf/test", json={"id": "o/m"}).json()["error"]

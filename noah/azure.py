@@ -9,6 +9,7 @@ URL cannot collect it. Credentials are write-only: the API says whether they are
 """
 from __future__ import annotations
 
+from typing import Any
 import json
 import os
 import re
@@ -43,9 +44,9 @@ def _settings_file() -> Path:
     return Path(os.environ.get("NOAH_AZ_SETTINGS", "data/azure_foundry.json"))
 
 
-def settings() -> dict:
+def settings() -> dict[str, Any]:
     """{'endpoint', 'auth', 'source'}; the endpoint can come from the environment or from what the user saved."""
-    saved = {}
+    saved: dict[str, Any] = {}
     try:
         saved = json.loads(_settings_file().read_text())
     except (OSError, ValueError):
@@ -60,7 +61,7 @@ def settings() -> dict:
     return {"endpoint": ep if ep else "", "auth": saved.get("auth", "key"), "source": "file" if ep else ""}
 
 
-def status() -> dict:
+def status() -> dict[str, Any]:
     s = settings()
     key, key_source = llm.token(llm.AZ)
     ready = bool(s["endpoint"]) and (s["auth"] == "cli" or bool(key))
@@ -92,7 +93,7 @@ def cli_token() -> str:
     return tok
 
 
-def connect() -> tuple[str, dict]:
+def connect() -> tuple[str, dict[str, Any]]:
     """(base URL, headers) for a call to the user's own Azure resource."""
     s = settings()
     if not s["endpoint"]:

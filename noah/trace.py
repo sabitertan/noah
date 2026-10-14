@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 import json
 import logging
 import os
@@ -14,7 +15,7 @@ class TraceStore:
         self.path = Path(path or os.environ.get("NOAH_TRACES", "traces/traces.jsonl"))
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def write(self, record: dict) -> None:
+    def write(self, record: dict[str, Any]) -> None:
         record = {"ts": time.time(), **record}
         try:
             with self.path.open("a") as f:
@@ -22,7 +23,7 @@ class TraceStore:
         except OSError as e:  # a read-only or unmapped volume must not fail the user's request
             logging.getLogger("noah").warning("could not write trace to %s: %s", self.path, e)
 
-    def read(self) -> list[dict]:
+    def read(self) -> list[dict[str, Any]]:
         if not self.path.exists():
             return []
         return [json.loads(line) for line in self.path.read_text().splitlines() if line]

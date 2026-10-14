@@ -25,7 +25,7 @@ class KeywordEngine:
             df.update(c.keys())
         total = len(docs)
         query = set(_tokens(message))
-        raw = {}
+        raw: dict[str, float] = {}
         for n, c in docs.items():
             norm = math.sqrt(sum(c.values())) or 1.0
             raw[n] = sum((1 + math.log(c[t])) * math.log(1 + total / df[t]) for t in query if t in c) / norm

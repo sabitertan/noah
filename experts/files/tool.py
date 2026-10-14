@@ -1,3 +1,4 @@
+from typing import Any
 import re
 
 from noah import filesvc
@@ -7,12 +8,12 @@ _STOP = {"find", "my", "the", "file", "files", "document", "documents", "search"
          "please", "can", "you", "where", "did", "put", "that", "what", "is", "inside", "contents", "content"}
 
 
-def extract_rule(message: str) -> dict:
+def extract_rule(message: str) -> dict[str, Any]:
     words = [w for w in re.findall(r"[A-Za-z0-9_.-]+", message) if w.lower().strip(".") not in _STOP]
     return {"query": " ".join(words)}
 
 
-def run(args: dict) -> dict:
+def run(args: dict[str, Any]) -> dict[str, Any]:
     """Find files, and open the best match right away when it can be previewed."""
     hits = filesvc.search(args.get("query", ""))
     if not hits:

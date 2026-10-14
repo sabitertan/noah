@@ -158,6 +158,31 @@ Docker image (built in a Node stage, no Node at runtime) and the desktop app (`b
 `noah/web/dist` is not committed, so a source checkout needs that one build, or the server shows a page saying so.
 Another API port: `NOAH_API=http://127.0.0.1:9000 npm run dev`.
 
+### Type checking (Pylance / pyright, strict)
+
+The Python code (`noah/`, `experts/`, `tests/`, `scripts/`, the desktop sidecar) is kept at zero errors under pyright's
+**strict** mode, which is what Pylance in VS Code runs. The settings live in `pyproject.toml` (`[tool.pyright]`), so
+Pylance and the command line check the same files with the same rules:
+
+```bash
+pip install -e ".[dev]"     # includes pyright
+pyright                     # from the activated .venv: expect "0 errors"
+```
+
+In VS Code, Pylance only finds the installed packages (FastAPI, httpx, pydantic, ...) when it uses the project's
+`.venv` as its interpreter. Without it, imports are unresolved and strict mode reports "partially unknown" types
+everywhere. Pick the interpreter with **Python: Select Interpreter** → `.venv`, or put this in `.vscode/settings.json`
+(the `.vscode/` folder is git-ignored, so each developer keeps their own):
+
+```json
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+}
+```
+
+Then run **Developer: Reload Window**.
+Strict mode comes from `pyproject.toml`, so no `python.analysis.typeCheckingMode` setting is needed.
+
 ## Slots
 
 | Slot | Choices today | Add your own |

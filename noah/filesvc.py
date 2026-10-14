@@ -5,6 +5,7 @@ root-relative POSIX strings so the browser never sees or sends absolute paths.
 """
 from __future__ import annotations
 
+from typing import Any
 import csv
 import io
 import os
@@ -63,7 +64,7 @@ def kind_of(p: Path) -> str:
     return "binary"
 
 
-def describe(p: Path) -> dict:
+def describe(p: Path) -> dict[str, Any]:
     kind = kind_of(p)
     return {"path": p.relative_to(files_root()).as_posix(), "name": p.name, "ext": p.suffix.lower(), "kind": kind,
             "size": p.stat().st_size, "previewable": kind != "binary", "openable": p.suffix.lower() in OPENABLE_EXT}
@@ -77,7 +78,7 @@ def _read_text(p: Path, limit: int) -> tuple[str | None, bool]:
     return raw[:limit].decode("utf-8", errors="replace"), len(raw) > limit
 
 
-def _preview_csv(p: Path) -> dict:
+def _preview_csv(p: Path) -> dict[str, Any]:
     text, truncated = _read_text(p, CSV_BYTES)
     if text is None:
         return {"kind": "csv", "error": "This file does not look like text."}
@@ -85,7 +86,7 @@ def _preview_csv(p: Path) -> dict:
         dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|")
     except csv.Error:
         dialect = csv.excel_tab if p.suffix.lower() == ".tsv" else csv.excel
-    rows = []
+    rows: list[list[str]] = []
     for i, row in enumerate(csv.reader(io.StringIO(text), dialect)):
         if i >= CSV_ROWS + 1:  # header + CSV_ROWS
             truncated = True
@@ -95,7 +96,7 @@ def _preview_csv(p: Path) -> dict:
             "note": f"Showing the first {CSV_ROWS} rows." if truncated else ""}
 
 
-def _preview_pdf(p: Path) -> dict:
+def _preview_pdf(p: Path) -> dict[str, Any]:
     if p.stat().st_size > PDF_MAX_BYTES:
         return {"kind": "pdf", "error": "This PDF is too large to preview here."}
     try:
@@ -105,7 +106,7 @@ def _preview_pdf(p: Path) -> dict:
         if reader.is_encrypted and not reader.decrypt(""):
             return {"kind": "pdf", "error": "This PDF is password-protected."}
         pages = len(reader.pages)
-        parts = []
+        parts: list[str] = []
         for i in range(min(pages, PDF_PAGES)):
             parts.append(f"--- page {i + 1} of {pages} ---\n{(reader.pages[i].extract_text() or '').strip()}")
         text = "\n\n".join(parts)
@@ -117,7 +118,7 @@ def _preview_pdf(p: Path) -> dict:
             "note": f"Showing the first {min(pages, PDF_PAGES)} of {pages} pages." if pages > PDF_PAGES else ""}
 
 
-def preview(p: Path) -> dict:
+def preview(p: Path) -> dict[str, Any]:
     kind = kind_of(p)
     if kind in ("text", "markdown"):
         text, truncated = _read_text(p, TEXT_BYTES)
@@ -141,7 +142,7 @@ def search(query: str, limit: int = LIST_LIMIT) -> list[tuple[float, Path, bool]
     if not root.exists():
         return []
     q = _tokens(query)
-    out = []
+    out: list[tuple[float, Path, bool]] = []
     for p in sorted(root.rglob("*")):
         if not p.is_file() or any(part.startswith(".") for part in p.relative_to(root).parts):
             continue

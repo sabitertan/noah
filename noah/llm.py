@@ -6,6 +6,7 @@ user's own key. Hosted models are called through the provider's API; nothing is 
 """
 from __future__ import annotations
 
+from typing import Any
 import os
 import re
 from dataclasses import dataclass, field
@@ -36,8 +37,8 @@ class Provider:
     file_default: str
     models_env: str
     models_default: str
-    id_re: re.Pattern
-    errors: dict = field(default_factory=dict)  # HTTP status -> plain-words explanation ({name} = the model)
+    id_re: re.Pattern[str]
+    errors: dict[int, str] = field(default_factory=lambda: {})  # HTTP status -> plain-words explanation ({name} = the model)
     id_hint: str = "Use the form organisation/model-name, e.g. Qwen/Qwen2.5-7B-Instruct."
     connector: str = ""      # module with connect() -> (base_url, headers), for providers whose endpoint and sign-in are per user
 
@@ -129,7 +130,7 @@ def clear_token(p: Provider = HF) -> None:
         pass
 
 
-def resolve(base_url: str, model: str) -> tuple[str, str, dict]:
+def resolve(base_url: str, model: str) -> tuple[str, str, dict[str, Any]]:
     """(base_url, model name to send, extra headers) for a model reference."""
     p = provider_of(model)
     if p is None:
@@ -149,13 +150,16 @@ def _explain(p: Provider, status: int, model: str) -> str:
     return p.errors.get(status, f"{p.label} returned HTTP {status} for {{name}}.").format(name=name)
 
 
-def chat(base_url: str, body: dict, timeout: float) -> dict:
+def chat(base_url: str, body: dict[str, Any], timeout: float) -> dict[str, Any]:
     """POST /chat/completions to the right server for body['model'] and return the JSON reply."""
     model = body.get("model", "")
     url, name, headers = resolve(base_url, model)
     try:
-        extra = {"headers": headers} if headers else {}  # local calls stay exactly as before
-        r = httpx.post(f"{url.rstrip('/')}/chat/completions", json={**body, "model": name}, timeout=timeout, **extra)
+        endpoint, payload = f"{url.rstrip('/')}/chat/completions", {**body, "model": name}
+        if headers:
+            r = httpx.post(endpoint, json=payload, timeout=timeout, headers=headers)
+        else:  # local calls stay exactly as before
+            r = httpx.post(endpoint, json=payload, timeout=timeout)
         r.raise_for_status()
     except httpx.HTTPStatusError as e:
         p = provider_of(model)
@@ -167,7 +171,7 @@ def chat(base_url: str, body: dict, timeout: float) -> dict:
     return r.json()
 
 
-def _newer_model_body(body: dict, response: httpx.Response) -> dict | None:
+def _newer_model_body(body: dict[str, Any], response: httpx.Response) -> dict[str, Any] | None:
     """Azure's newer (reasoning) models reject max_tokens and a custom temperature. Retry once without them."""
     try:
         text = response.text.lower()

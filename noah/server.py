@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any, Awaitable, Callable, TypeVar
 import hmac
 import importlib.util
 import json
@@ -10,12 +11,13 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import Response, FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import filesvc
 from .engines import make_engine
+from .engines.base import DecisionEngine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
 from .generate import answer
@@ -75,7 +77,7 @@ if os.environ.get("NOAH_PARENT_PID", "").isdigit():
 
 
 @app.middleware("http")
-async def launch_guard(request: Request, call_next):
+async def launch_guard(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     if LAUNCH_TOKEN:
         host = request.headers.get("host", "").rsplit(":", 1)[0].strip("[]").lower()
         supplied = request.cookies.get("noah_token", "") or request.headers.get("authorization", "").removeprefix("Bearer ")
@@ -130,10 +132,10 @@ def _disabled() -> set[str]:
         return set()
 
 
-def _active_experts() -> dict:
+def _active_experts() -> dict[str, Any]:
     off = _disabled()
     return {n: e for n, e in experts.items() if n not in off}
-_engines: dict[str, object] = {}  # engines can be expensive to load (embedding), so cache them
+_engines: dict[str, DecisionEngine] = {}  # engines can be expensive to load (embedding), so cache them
 
 
 class AskRequest(BaseModel):
@@ -224,7 +226,10 @@ class ExpertToggle(BaseModel):
     enabled: bool
 
 
-def _editor(call):
+_T = TypeVar("_T")
+
+
+def _editor(call: Callable[[], _T]) -> _T:
     try:
         return call()
     except expert_store.ExpertError as e:
@@ -297,11 +302,11 @@ def traces(limit: int = 50):
     return trace.read()[-limit:][::-1]
 
 
-def _profile_enabled(p: dict) -> bool:
+def _profile_enabled(p: dict[str, Any]) -> bool:
     return p.get("enabled", True) is not False  # profiles saved before the switch existed count as enabled
 
 
-def _load_profiles() -> list[dict]:
+def _load_profiles() -> list[dict[str, Any]]:
     if PROFILES.exists():
         try:
             return json.loads(PROFILES.read_text())
@@ -310,7 +315,7 @@ def _load_profiles() -> list[dict]:
     return json.loads(json.dumps(DEFAULT_PROFILES))  # deep copy so callers can mutate
 
 
-def _save_profiles(profiles: list[dict]) -> None:
+def _save_profiles(profiles: list[dict[str, Any]]) -> None:
     PROFILES.parent.mkdir(parents=True, exist_ok=True)
     PROFILES.write_text(json.dumps(profiles, indent=2))
 
@@ -321,7 +326,7 @@ def get_profiles():
 
 
 @app.put("/api/profiles")
-def put_profiles(profiles: list[dict]):
+def put_profiles(profiles: list[dict[str, Any]]):
     if profiles and not any(_profile_enabled(p) for p in profiles):
         raise HTTPException(400, "At least one orchestrator must stay enabled.")
     _save_profiles(profiles)

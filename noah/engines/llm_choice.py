@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 import json
 import math
 
@@ -23,7 +24,7 @@ def expert_options(experts: dict[str, Expert], examples: int = 0) -> list[tuple[
     return [(e.name, text(e)) for e in experts.values()] + [NONE_OPTION]
 
 
-def decision_record(message: str, experts: dict[str, Expert]) -> dict:
+def decision_record(message: str, experts: dict[str, Expert]) -> dict[str, Any]:
     """The {state, question, options} record Tev1 (and Jev-style models) are trained on."""
     options = expert_options(experts, examples=3)  # bench: 24/28 routed with descriptions only, 28/28 with examples
     if len(options) > len(LABELS):
@@ -32,11 +33,13 @@ def decision_record(message: str, experts: dict[str, Expert]) -> dict:
             "options": [{"label": LABELS[i], "key": k, "description": d} for i, (k, d) in enumerate(options)]}
 
 
-def option_probabilities(choice: dict, labels: dict[str, str]) -> dict[str, float]:
+def option_probabilities(choice: dict[str, Any], labels: dict[str, str]) -> dict[str, float]:
     """Per-option probability from the first token's top logprobs; falls back to the answered letter alone."""
-    content = (choice.get("logprobs") or {}).get("content") or []
-    probs = {}
-    for t in content[0].get("top_logprobs", []) if content else []:
+    logprobs: dict[str, Any] = choice.get("logprobs") or {}
+    content: list[dict[str, Any]] = logprobs.get("content") or []
+    probs: dict[str, float] = {}
+    top: list[dict[str, Any]] = content[0].get("top_logprobs", []) if content else []
+    for t in top:
         key = labels.get(t["token"].strip())
         if key and key not in probs:
             probs[key] = math.exp(t["logprob"])
@@ -59,7 +62,7 @@ class LLMChoiceEngine:
 
     def decide(self, message: str, experts: dict[str, Expert]) -> list[Decision]:
         record = decision_record(message, experts)
-        labels = {o["label"]: o["key"] for o in record["options"]}
+        labels: dict[str, str] = {o["label"]: o["key"] for o in record["options"]}
         reply = chat(self.base_url, {
             "model": self.model, "temperature": 0, "max_tokens": 8, "logprobs": True, "top_logprobs": 20,
             "reasoning_effort": "none",  # Qwen3.5-based: skip the thinking block, answer with the letter

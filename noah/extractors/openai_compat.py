@@ -30,7 +30,7 @@ class OpenAICompatExtractor:
         self.fallback = RuleExtractor() if fallback else None
 
     def _body(self, mode: str, message: str, expert: Expert) -> dict[str, Any]:
-        body = {"model": self.model, "temperature": 0}
+        body: dict[str, Any] = {"model": self.model, "temperature": 0}
         if mode == "tools":
             body["messages"] = [{"role": "user", "content": message}]
             body["tools"] = [{"type": "function", "function": {

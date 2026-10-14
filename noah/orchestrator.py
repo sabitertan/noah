@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any, cast
 import asyncio
 import time
 from dataclasses import asdict
@@ -20,7 +21,7 @@ class Router(Executor):
     """Runs the decision engine and picks which experts get the message."""
 
     def __init__(self, engine: DecisionEngine, experts: dict[str, Expert], mode: str, threshold: float,
-                 fanout_margin: float, seen: dict):
+                 fanout_margin: float, seen: dict[str, Any]):
         super().__init__(id="router")
         self.seen = seen
         self.engine, self.experts = engine, experts
@@ -47,7 +48,9 @@ class ExpertNode(Executor):
 
     @handler
     async def run_expert(self, routed: Routed, ctx: WorkflowContext[Never, ExpertResult]) -> None:
-        start, args, error, out, attachments = time.perf_counter(), {}, None, "", []
+        start, error, out = time.perf_counter(), None, ""
+        args: dict[str, Any] = {}
+        attachments: list[dict[str, Any]] = []
         extractor = self.extractor.name
         try:
             if self.expert.kind == "generate":
@@ -62,9 +65,12 @@ class ExpertNode(Executor):
                 else:
                     args = await asyncio.to_thread(self.extractor.extract, routed.message, self.expert)
                 validate_args(args, self.expert.parameters)
-                result = await asyncio.to_thread(self.expert.run, args)
+                if self.expert.run is None:
+                    raise RuntimeError(f"expert {self.expert.name} has no run()")
+                result: Any = await asyncio.to_thread(self.expert.run, args)
                 if isinstance(result, dict):  # rich result: {"text": ..., "files": [...]}
-                    out, attachments = result.get("text", ""), result.get("files", [])
+                    rich = cast(dict[str, Any], result)
+                    out, attachments = rich.get("text", ""), rich.get("files", [])
                 else:
                     out = result
         except Exception as e:
@@ -94,7 +100,7 @@ class Orchestrator:
         self.trace, self.mode, self.threshold, self.fanout_margin = trace, mode, threshold, fanout_margin
         self.llm_url = llm_url
 
-    def _build(self, seen: dict):
+    def _build(self, seen: dict[str, Any]):
         router = Router(self.engine, self.experts, self.mode, self.threshold, self.fanout_margin, seen)
         nodes = [ExpertNode(e, self.extractor, self.llm_url) for e in self.experts.values()]
         no_match = NoMatch()
@@ -107,7 +113,7 @@ class Orchestrator:
                 .build())
 
     @staticmethod
-    def _trace_results(outputs: list[ExpertResult]) -> list[dict]:
+    def _trace_results(outputs: list[ExpertResult]) -> list[dict[str, Any]]:
         """Traces keep routing facts, not file contents: drop previews from attachments."""
         rows = [asdict(o) for o in outputs]
         for r in rows:
@@ -120,7 +126,7 @@ class Orchestrator:
 
     async def ask_traced(self, message: str) -> tuple[list[ExpertResult], list[Decision]]:
         start = time.perf_counter()
-        seen: dict = {}
+        seen: dict[str, Any] = {}
         result = await self._build(seen).run(message)
         outputs: list[ExpertResult] = list(result.get_outputs())
         decisions: list[Decision] = seen.get("decisions", [])

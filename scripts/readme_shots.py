@@ -2,12 +2,13 @@
 import json
 import os
 import sys
-from playwright.sync_api import sync_playwright
+
+from playwright.sync_api import Page, sync_playwright
 
 base = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8765"
 
 
-def ask(pg, q):
+def ask(pg: Page, q: str) -> None:
     n = pg.locator(".a .body").count()
     pg.fill("#msg", q); pg.press("#msg", "Enter")
     pg.wait_for_function(f"document.querySelectorAll('.a .body').length>{n}", timeout=120000)
@@ -41,10 +42,10 @@ with sync_playwright() as p:
     hf = b.new_page(viewport={"width": 1280, "height": 900})
     hf.goto(base + "/#/models"); hf.wait_for_selector("#modelsTable tbody tr")
 
-    def open_tab(name):
+    def open_tab(name: str) -> None:
         hf.click(f"[data-tab={name}]"); hf.wait_for_selector(f"[data-tab={name}].active")
 
-    def use_hosted(prefix, key, query):  # add the first search result that supports tool calls; returns its id
+    def use_hosted(prefix: str, key: str, query: str) -> str:  # add the first search result that supports tool calls; returns its id
         open_tab(key)
         hf.wait_for_selector(f"#{key}Hosted tbody tr")
         hf.fill(f"#{key}-search", query); hf.wait_for_timeout(1500); hf.wait_for_selector(f"#{key}Hosted tbody tr")
