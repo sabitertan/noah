@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 import time
 from dataclasses import asdict
 
@@ -9,7 +8,7 @@ from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from typing_extensions import Never
 
 from .engines.base import DecisionEngine
-from .generate import generate
+from .generate import answer
 from .extractors import ArgExtractor, validate_args
 from .trace import TraceStore
 from .types import Decision, Expert, ExpertResult, Routed
@@ -55,11 +54,7 @@ class ExpertNode(Executor):
                 # the expert's own small model answers directly; no argument extraction needed
                 model = self.expert.model["id"]
                 extractor = f"generate:{model}"
-                out = await asyncio.to_thread(generate, self.llm_url, model, self.expert.system, routed.message,
-                                         shots=self.expert.shots)
-                for pattern in self.expert.strip:
-                    out = re.sub(pattern, "", out, flags=re.S | re.I)
-                out = re.sub(r"\n{3,}", "\n\n", out).strip()
+                out = await asyncio.to_thread(answer, self.expert, routed.message, self.llm_url)
             else:
                 supplied = next((d.args for d in routed.decisions if d.expert == self.expert.name and d.args), None)
                 if supplied:  # an LLM orchestrator already produced the arguments: skip the extractor model call

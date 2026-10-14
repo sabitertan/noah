@@ -156,3 +156,11 @@ user message
   `hosted.make`), new `noah/azure.py`, `AzurePanel.vue`, shared `lib/hostedActions.js`. 139 Python tests (41 new, network and `az` faked). The scratch browser scripts were lost when
   the scratchpad was cleaned, so they were rebuilt as `scripts/ui_check.py` (72 checks across chat, routing, orchestrators, experts, all four providers, both Azure sign-in modes, tabs,
   theme) against a stub of Ollama + HF + OpenRouter + Azure + a fake `az`. Not verified against a real Azure resource (no subscription here): request shape follows the docs only.
+- Expert editor (2026-10-14): create, edit, delete experts from the Experts page (`#/experts/<name>`, `#/experts/new`). Generate experts (model + prompt, data only) are fully editable
+  with few-shot exchanges, output filters and a "Try it" run of the unsaved draft; tool experts (Python) only get their routing text (description, examples) editable, and their code,
+  parameters and model are never touched, because a browser must not be able to write code the server executes. New `noah/expert_store.py` (pydantic limits, name rules, regex
+  validation, atomic yaml writes, deleting only files it wrote), `server._reload_experts()` so edits apply without a restart, `generate.answer()` shared by real requests and Try it,
+  `ExpertEditor.vue`. Found and fixed a routing bug along the way: New Chat from another page did nothing while a chat was open (a state watcher wrote the old URL back before
+  hashchange fired); navigation now applies immediately. 176 Python tests (37 new for the store and endpoints, incl. path traversal, tool code never written, special characters
+  round-trip, failed write keeps the old file), `scripts/ui_check.py` now 94 checks and runs on a temp copy of `experts/`.
+  Known limit: output-filter regexes are user supplied and applied to model output, so a pathological pattern could be slow (length is capped at 200, validity is checked).

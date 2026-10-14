@@ -1,6 +1,7 @@
 // The one place UI state lives. Components read these refs and call these actions, so two views can never disagree.
 import { ref, reactive, computed, watch } from 'vue';
 import { send, getJson, store } from './lib/api.js';
+import { PROVIDERS } from './lib/format.js';
 
 export const MODEL_ENGINES = ['llm_tools', 'llm_choice', 'laya'];  // engines that take an engine_model
 export const TITLES = { orch: 'Orchestrators', experts: 'Experts', models: 'Models', traces: 'Traces' };
@@ -32,13 +33,16 @@ export const enabledExpertCount = computed(() => cfg.value.experts.filter(e => e
 const parseHash = () => {
   const [v, sub] = location.hash.replace(/^#\/?/, '').split('/');
   return { view: VIEWS.includes(v) ? v : 'chat', id: v === 'chat' && sub ? decodeURIComponent(sub) : null,
-           tab: v === 'models' && MODEL_TABS.includes(sub) ? sub : 'local' };
+           tab: v === 'models' && MODEL_TABS.includes(sub) ? sub : 'local', expert: v === 'experts' && sub ? decodeURIComponent(sub) : null };
 };
-// `sub` is the chat id on #/chat/<id> and the tab on #/models/<tab> ('local' is the default and stays out of the URL)
-export const hashFor = (v, sub) => '#/' + v + (v === 'chat' && sub ? '/' + encodeURIComponent(sub) : v === 'models' && sub && sub !== 'local' ? '/' + sub : '');
+// `sub` is the chat id on #/chat/<id>, the tab on #/models/<tab> ('local' is the default and stays out of the URL),
+// and the expert being edited on #/experts/<name> (#/experts/new for a fresh one)
+export const hashFor = (v, sub) => '#/' + v + (v === 'chat' && sub ? '/' + encodeURIComponent(sub) : v === 'models' && sub && sub !== 'local' ? '/' + sub
+  : v === 'experts' && sub ? '/' + encodeURIComponent(sub) : '');
 export const view = ref(parseHash().view);
 export const modelsTab = ref(parseHash().tab);
-const subFor = v => v === 'chat' ? currentChat.value : v === 'models' ? modelsTab.value : null;
+export const expertSub = ref(parseHash().expert);   // null: the list of experts; otherwise the editor
+const subFor = v => v === 'chat' ? currentChat.value : v === 'models' ? modelsTab.value : null;   // where a sidebar link goes (experts: the list)
 export const title = computed(() => view.value === 'chat' ? chatObj.value?.title || 'New Chat' : TITLES[view.value]);
 
 function applyRoute() {  // URL -> state
@@ -46,22 +50,31 @@ function applyRoute() {  // URL -> state
   if (r.view === 'chat' && r.id) currentChat.value = chats.value.some(c => c.id === r.id) ? r.id : null;  // unknown chat -> new chat
   view.value = r.view;
   if (r.view === 'models') modelsTab.value = r.tab;  // other pages keep the last tab, so coming back lands where you left
+  expertSub.value = r.view === 'experts' ? r.expert : null;
 }
 function syncUrl() {  // state -> URL, without adding a history entry
-  const want = hashFor(view.value, subFor(view.value));
+  const want = hashFor(view.value, view.value === 'experts' ? expertSub.value : subFor(view.value));
   if (location.hash !== want) history.replaceState(null, '', want);
 }
-export const go = v => { location.hash = hashFor(v, subFor(v)); };
-export const openModelsTab = t => { location.hash = hashFor('models', t); };  // navigation adds a history entry; hashchange applies it
-export const openChat = id => { location.hash = hashFor('chat', id); };
-export function newChat() { currentChat.value = null; go('chat'); }
+// Navigating adds a history entry and applies the new route right away. Waiting for the browser's hashchange event is not enough:
+// a watcher on the state can run first and write the old route back over the new one.
+function navigate(v, sub) {
+  const h = hashFor(v, sub);
+  if (location.hash !== h) location.hash = h;
+  applyRoute();
+}
+export const go = v => navigate(v, subFor(v));
+export const openModelsTab = t => navigate('models', t);
+export const openExpert = name => navigate('experts', name);   // 'new' opens an empty editor
+export const openChat = id => navigate('chat', id);
+export function newChat() { currentChat.value = null; navigate('chat', null); }
 export function deleteChat(id) {
   chats.value = chats.value.filter(c => c.id !== id);
   if (currentChat.value === id) currentChat.value = null;
   go('chat');
 }
 window.addEventListener('hashchange', applyRoute);
-watch([view, currentChat, modelsTab], syncUrl);
+watch([view, currentChat, modelsTab, expertSub], syncUrl);
 
 /* ---------- persistence ---------- */
 watch(activeProfile, v => store.set('profile', v));
@@ -95,6 +108,17 @@ export async function sendMessage(text) {
   } catch (err) { m.error = err.message; }
   delete m.pending; busy.value = false;
   return true;
+}
+
+// Model choices grouped by where they run. A saved value that is in no list stays visible instead of being swapped silently.
+// `engine` is for decision engines that bring their own list (laya); pass '' for an ordinary model picker.
+export function modelGroups(engine, cur) {
+  const own = (cfg.value.engine_models || {})[engine];
+  const groups = own ? [{ label: 'Models', models: own }]
+    : [{ label: 'Local (Ollama)', models: cfg.value.models },
+       ...Object.entries(PROVIDERS).map(([k, p]) => ({ label: `${p.label} (hosted, no download)`, models: cfg.value[k + '_models'] || [] }))];
+  if (cur && !groups.some(g => g.models.includes(cur))) groups.unshift({ label: 'Current', models: [cur] });
+  return groups.filter(g => g.models.length);
 }
 
 export const refreshConfig = async () => { cfg.value = await getJson('/api/config'); };

@@ -76,4 +76,10 @@ with sync_playwright() as p:
     for name in ("gpt-4o-mini", "my-llama"):
         hf.request.delete(f"{base}/api/az/my/{name}")
     hf.request.delete(f"{base}/api/hf/my/{hf_model}"); hf.request.delete(f"{base}/api/or/my/{or_model}")  # leave the server as we found it
+    # Expert editor: an existing generate expert, with a real "Try it" answer (read-only: nothing is saved)
+    ed = b.new_page(viewport={"width": 1280, "height": 1250})
+    ed.goto(base + "/#/experts/csharp"); ed.wait_for_selector("#e-system")
+    ed.fill("#e-try-message", "write a C# method that reverses a string"); ed.click("#e-try"); ed.wait_for_selector("#e-try-out", timeout=120000)
+    ed.evaluate("document.querySelector('#v-experts').scrollTop = 0"); ed.wait_for_timeout(300)
+    ed.screenshot(path="docs/expert-editor.png")
     b.close()

@@ -11,6 +11,7 @@ Exit code 0 when every check passes. Needs a POSIX shell for the fake `az` (the 
 import argparse
 import json
 import os
+import shutil
 import socket
 import stat
 import subprocess
@@ -174,6 +175,56 @@ def run_checks(pg, base, stub_url, data: Path, has_az_cli: bool, shots: Path | N
     check("sidebar shows enabled/total experts", pg.locator(".item[data-view=experts] .meta").inner_text() == f"{int(total) - 2}/{total}")
     pg.locator("#expertsPanel .sw").nth(0).click(); pg.locator("#expertsPanel .sw").nth(1).click(); pg.wait_for_timeout(500)
 
+    # New Chat must work from any page, even while a chat is open (a watcher once wrote the old route back over the new one)
+    nav("experts"); pg.wait_for_selector("[data-new-expert]"); pg.click("#newChat"); pg.wait_for_selector(".chip")
+    check("New Chat from another page opens an empty chat", pg.evaluate("location.hash") == "#/chat" and pg.locator(".msg").count() == 0)
+    pg.click(".chat-item"); pg.wait_for_selector(".msg"); nav("models"); pg.click(".chat-item"); pg.wait_for_selector(".msg")
+    check("opening a chat from another page works", pg.evaluate("location.hash").startswith("#/chat/"))
+
+    # ---- creating and editing experts ----
+    nav("experts"); pg.wait_for_selector("[data-new-expert]")
+    count = int(pg.locator(".item[data-view=experts] .meta").inner_text())
+    pg.click("[data-new-expert]"); pg.wait_for_selector("#e-name")
+    check("new expert opens an editor with its own URL", pg.evaluate("location.hash") == "#/experts/new")
+    pg.click("#e-save"); pg.wait_for_selector("#e-error")
+    check("saving an empty expert explains what is missing", pg.inner_text("#e-error") != "")
+    pg.fill("#e-name", "Bad Name"); pg.fill("#e-description", "Answers in pirate speak."); pg.fill("#e-examples", "talk like a pirate\nsay it like a pirate would")
+    pg.fill("#e-system", "You are a pirate. Answer briefly in pirate speak.")
+    pg.click("#e-save"); pg.wait_for_function("(document.getElementById('e-error') || {innerText: ''}).innerText.toLowerCase().includes('name')")
+    check("a bad name is refused and nothing is created", "lowercase" in pg.inner_text("#e-error").lower() and pg.evaluate("location.hash") == "#/experts/new")
+    pg.fill("#e-name", "pirate")
+    check("model list is grouped by where models run", "Local (Ollama)" in pg.locator("#e-model optgroup").evaluate_all("els => els.map(e => e.label)"))
+    pg.fill("#e-try-message", "ahoy there"); pg.click("#e-try"); pg.wait_for_selector("#e-try-out")
+    check("Try it runs the draft", pg.inner_text("#e-try-out .body") == "ok")
+    check("Try it saved nothing", not (data / "experts" / "pirate").exists())
+    pg.click("#e-addshot"); pg.locator(".shot textarea").nth(0).fill("hi"); pg.locator(".shot textarea").nth(1).fill("Arr!"); pg.fill("#e-strip", "```\\w*")
+    pg.click("#e-save"); pg.wait_for_selector("[data-expert=pirate]")
+    check("saved: back on the list with a new card", pg.evaluate("location.hash") == "#/experts" and pg.locator("[data-expert=pirate]").count() == 1)
+    check("sidebar count includes the new expert", pg.locator(".item[data-view=experts] .meta").inner_text() == str(count + 1))
+    saved = (data / "experts" / "pirate" / "expert.yaml").read_text()
+    check("written as a generate expert, never a tool", "kind: generate" in saved and "tool" not in saved and not (data / "experts" / "pirate" / "tool.py").exists())
+    check("shots and filters are saved", "Arr!" in saved and "\\w*" in saved)
+    pg.click("#newChat"); pg.wait_for_selector(".chip")
+    ask("talk like a pirate")
+    check("a message is routed to the new expert without a restart", pg.locator(".a .badge").last.inner_text() == "pirate")
+    nav("experts"); pg.click("[data-expert=pirate] h3 .grow"); pg.wait_for_selector("#e-description")
+    check("selecting a card opens its editor", pg.evaluate("location.hash") == "#/experts/pirate" and pg.input_value("#e-name") == "pirate" and pg.locator("#e-name").is_disabled())
+    check("editor shows the saved prompt", pg.input_value("#e-system").startswith("You are a pirate"))
+    pg.fill("#e-description", "Pirate talk, edited."); pg.click("#e-save"); pg.wait_for_selector("[data-expert=pirate]")
+    pg.goto(base + "#/experts/pirate"); pg.reload(); pg.wait_for_selector("#e-description")
+    check("refresh stays in the editor and shows the saved edit", pg.input_value("#e-description") == "Pirate talk, edited.")
+    pg.click("#e-cancel"); pg.wait_for_selector("[data-expert=pirate]"); check("cancel returns to the list", pg.evaluate("location.hash") == "#/experts")
+    # a tool expert: routing text only, its code is never offered or written
+    pg.click("[data-expert=calc] h3 .grow"); pg.wait_for_selector("#e-toolnote")
+    check("tool expert shows no model, prompt or delete", all(pg.locator(sel).count() == 0 for sel in ("#e-model", "#e-system", "#e-strip", "#e-delete")))
+    pg.fill("#e-examples", pg.input_value("#e-examples") + "\nadd 2 and 2"); pg.click("#e-save"); pg.wait_for_selector("[data-expert=calc]")
+    check("tool expert routing edited", "add 2 and 2" in (data / "experts" / "calc" / "expert.yaml").read_text())
+    check("tool code untouched", (data / "experts" / "calc" / "tool.py").read_bytes() == (ROOT / "experts" / "calc" / "tool.py").read_bytes())
+    pg.click("[data-expert=pirate] h3 .grow"); pg.wait_for_selector("#e-delete"); pg.click("#e-delete"); pg.click("#e-delete-yes"); pg.wait_for_selector("[data-new-expert]"); pg.wait_for_function("!document.querySelector('[data-expert=pirate]')")
+    check("delete removes the expert", not (data / "experts" / "pirate" / "expert.yaml").exists() and pg.locator(".item[data-view=experts] .meta").inner_text() == str(count),
+          f"sidebar {pg.locator('.item[data-view=experts] .meta').inner_text()!r}, expected {count}")
+    check("the experts list is back to what it was", pg.locator("#expertsPanel .sw").count() == count, f"{pg.locator('#expertsPanel .sw').count()} cards, expected {count}")
+
     # ---- models: tabs, hosted providers, downloads ----
     nav("models"); pg.wait_for_selector("#modelsTable tbody tr")
     rows = pg.locator("#modelsTable tbody tr")
@@ -246,8 +297,9 @@ def run_checks(pg, base, stub_url, data: Path, has_az_cli: bool, shots: Path | N
         check(f"{group} model is marked as hosted on its card", "☁" in pg.locator("#orchPanel .card.sel").inner_text())
         pg.click("#f-use"); pg.wait_for_selector("#msg")
         check(f"answer through a {group} extractor", "36" in ask("calculate 15% of 240"))
-        c = [e for e in log() if e.get("has_schema") and e.get("auth") == f"Bearer {key}"][-1]
-        check(f"{group} extraction used its own key and a JSON schema", c["model"] == model[len(prefix):], str(c))
+        sent = [e for e in log() if e.get("has_schema") and e.get("auth") == f"Bearer {key}"]
+        check(f"{group} extraction used its own key and a JSON schema", bool(sent) and sent[-1]["model"] == model[len(prefix):],
+              f"routed to {pg.locator('.a .badge').last.inner_text()}; last calls: {log()[-4:]}")
 
     # ---- keyless Azure: the (fake) Azure CLI provides the token ----
     nav("models"); tab("az"); pg.click("#azPanel .btn:has-text('Disconnect')"); pg.wait_for_selector("#az-endpoint")
@@ -304,12 +356,13 @@ def main():
             az.write_text(f"#!/bin/sh\necho '{{\"accessToken\":\"{ENTRA}\",\"expires_on\":9999999999}}'\n")
             az.chmod(az.stat().st_mode | stat.S_IEXEC)
         (data / "d.json").write_text("[]")
+        shutil.copytree(ROOT / "experts", data / "experts", ignore=shutil.ignore_patterns("__pycache__"))   # the editor writes here, not into the repo
         env = {**os.environ, "PATH": f"{data / 'bin'}{os.pathsep}{os.environ['PATH']}", "NOAH_AZURE_ALLOW_LOCAL": "1",
                "NOAH_LLM_URL": f"{stub_url}/ollama", "NOAH_HF_ROUTER": f"{stub_url}/router/v1", "NOAH_HF_HUB": f"{stub_url}/hub",
                "NOAH_OR_BASE": f"{stub_url}/or/api/v1", "NOAH_HF_TOKEN_FILE": str(data / "hf_token"), "NOAH_HF_MODELS": str(data / "hf_models.json"),
                "NOAH_OR_TOKEN_FILE": str(data / "or_key"), "NOAH_OR_MODELS": str(data / "or_models.json"), "NOAH_AZ_TOKEN_FILE": str(data / "az_key"),
                "NOAH_AZ_SETTINGS": str(data / "az.json"), "NOAH_AZ_MODELS": str(data / "az_models.json"), "NOAH_PROFILES": str(data / "profiles.json"),
-               "NOAH_DISABLED_EXPERTS": str(data / "d.json"), "NOAH_TRACES": str(data / "traces.jsonl"), "NOAH_FILES_DIR": str(ROOT / "data/files"),
+               "NOAH_DISABLED_EXPERTS": str(data / "d.json"), "NOAH_EXPERTS": str(data / "experts"), "NOAH_TRACES": str(data / "traces.jsonl"), "NOAH_FILES_DIR": str(ROOT / "data/files"),
                "HF_TOKEN": "", "OPENROUTER_API_KEY": "", "AZURE_FOUNDRY_API_KEY": "", "AZURE_OPENAI_API_KEY": "", "AZURE_FOUNDRY_ENDPOINT": "", "AZURE_OPENAI_ENDPOINT": ""}
         server = subprocess.Popen([sys.executable, "-m", "uvicorn", "noah.server:app", "--port", str(port)], cwd=ROOT, env=env,
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -329,7 +382,7 @@ def main():
                 pg.on("pageerror", lambda e: problems.append(str(e)))
                 pg.on("console", lambda m: problems.append(m.text) if m.type in ("error", "warning") else None)
                 run_checks(pg, f"http://127.0.0.1:{port}/", stub_url, data, has_az_cli, args.shots)
-                real = [m for m in problems if not any(code in m for code in ("400", "401", "404", "502"))]  # the deliberately wrong keys above
+                real = [m for m in problems if not any(code in m for code in ("400", "401", "404", "422", "502"))]  # the deliberately wrong keys above
                 check("no console errors or Vue warnings", not real, str(real))
                 browser.close()
         finally:

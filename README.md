@@ -284,9 +284,21 @@ When several files match, you get a list with an **Open** button on each.
 - Keep an expert's `examples` file-specific. Generic phrases such as "open my ..." or "show me ..." also match small
   talk and pushed off-topic messages above the routing threshold (0.70 vs 0.57 once fixed).
 
-## Adding an expert
+## Adding and editing experts
 
-Create `experts/<name>/expert.yaml` (the app reloads when you save). Two kinds:
+**In the web UI** (Experts page): press **New expert** to create a *generate* expert, or select any expert to edit it. You
+give it a name, a description, example messages (Noah routes by how close a message is to them), a model (local or hosted),
+and the system prompt that makes it do its one job; optionally few-shot example exchanges and output filters (regular
+expressions removed from every answer). **Try it** runs your draft on a message before you save, and a saved expert is
+used immediately, with no restart. It is written to `experts/<name>/expert.yaml`.
+
+![The expert editor for the C# expert: description, examples, model, system prompt and a Try it box with a real answer](docs/expert-editor.png)
+
+- **Tool experts run Python** (`tool.py`), so the UI never lets a browser write code that the server then executes. For those you can change how they are routed (description and examples); their code, parameters and model stay in the files, and they cannot be deleted from the UI.
+- **Names** are fixed once created (a folder name and the tool name an orchestrator calls): create a new expert and delete the old one to rename.
+- **Built-in experts are plain files in `experts/`**, so editing or deleting one in the UI changes that file (use git to get it back).
+
+**Or by hand:** create `experts/<name>/expert.yaml` (the app reloads when you save). Two kinds:
 
 ```yaml
 # 1) tool expert: a small model extracts arguments, tool.py does the work

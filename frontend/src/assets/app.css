@@ -196,3 +196,19 @@ th { color: var(--muted); font-weight: 400; }
 .rowact .fnote { flex: 1 1 100%; text-align: left; white-space: normal; margin: 0; }
 .hfrow .choice input { flex: none; min-width: 0; width: auto; }
 .hfrow .choice { margin-right: 14px; }
+
+/* experts: clickable cards and the editor */
+.card.click { cursor: pointer; }
+.card.click:hover { border-color: var(--accent); }
+.form.wide { max-width: 780px; align-items: start; }
+.form.wide > label { padding-top: 8px; }
+.form.wide input, .form.wide select, .form.wide textarea { width: 100%; }
+textarea { font: inherit; resize: vertical; }
+.form.wide .fnote { margin: 4px 0 0; }
+.shot { display: grid; gap: 6px; margin-bottom: 10px; padding: 8px; border: 1px solid color-mix(in srgb, var(--border) 50%, transparent); border-radius: 10px; }
+.shot .btn { justify-self: start; }
+.back { margin: 6px 0 0; }
+.tryit { max-width: 780px; margin-top: 22px; }
+.tryit h3 { margin: 0 0 6px; font-size: 14px; }
+.tryit h3 .meta { color: var(--muted); font-size: 11px; font-weight: 400; margin-left: 6px; }
+.tryit .a .body { white-space: pre-wrap; }

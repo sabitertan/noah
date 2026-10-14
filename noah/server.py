@@ -4,6 +4,7 @@ import hmac
 import importlib.util
 import json
 import os
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -11,15 +12,17 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import filesvc
 from .engines import make_engine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
-from . import azure, hf, llm, openrouter
+from .generate import answer
+from . import azure, expert_store, hf, llm, openrouter
 from .orchestrator import Orchestrator
 from .registry import load_experts
+from .types import Expert
 from .trace import TraceStore
 
 WEB = Path(os.environ.get("NOAH_WEB_DIST", Path(__file__).parent / "web" / "dist"))  # the built UI (frontend/: npm run build)
@@ -106,7 +109,16 @@ if HAS_LAYA:
     # Zero-shot Laya puts most mass on "none", so a low threshold; bench: english 20/28 routed, 4/4 declined at 0.1.
     DEFAULT_PROFILES.append({"name": "Laya decision", "engine": "laya", "mode": "route", "extractor": "openai_compat",
                              "model": "qwen2.5:0.5b", "engine_model": "english", "threshold": 0.1})
-experts = load_experts(os.environ.get("NOAH_EXPERTS", "experts"))
+EXPERTS_DIR = Path(os.environ.get("NOAH_EXPERTS", "experts"))
+experts = load_experts(EXPERTS_DIR)
+
+
+def _reload_experts() -> None:
+    """Pick up what the editor just wrote. Engines and the orchestrator read this dict per request, so nothing else needs resetting
+    (the embedding engine caches by each expert's card text, so an edit is re-embedded on its own)."""
+    fresh = load_experts(EXPERTS_DIR)
+    experts.clear()
+    experts.update(fresh)
 trace = TraceStore()
 DISABLED = Path(os.environ.get("NOAH_DISABLED_EXPERTS", "data/disabled_experts.json"))
 
@@ -210,6 +222,63 @@ async def ask(req: AskRequest):
 
 class ExpertToggle(BaseModel):
     enabled: bool
+
+
+def _editor(call):
+    try:
+        return call()
+    except expert_store.ExpertError as e:
+        raise HTTPException(e.status, str(e))
+
+
+@app.get("/api/experts/{name}/manifest")
+def get_expert_manifest(name: str):
+    return _editor(lambda: expert_store.read(EXPERTS_DIR, name))
+
+
+@app.post("/api/experts", status_code=201)
+def create_expert(body: expert_store.ExpertIn):
+    name = _editor(lambda: expert_store.create(EXPERTS_DIR, body))
+    _reload_experts()
+    return expert_store.read(EXPERTS_DIR, name)
+
+
+@app.put("/api/experts/{name}/manifest")
+def update_expert(name: str, body: expert_store.ExpertIn):
+    _editor(lambda: expert_store.update(EXPERTS_DIR, name, body))
+    _reload_experts()
+    return expert_store.read(EXPERTS_DIR, name)
+
+
+@app.delete("/api/experts/{name}")
+def delete_expert(name: str):
+    _editor(lambda: expert_store.delete(EXPERTS_DIR, name))
+    off = _disabled()
+    if name in off:
+        off.discard(name)
+        DISABLED.write_text(json.dumps(sorted(off)))
+    _reload_experts()
+    return {"deleted": name}
+
+
+class ExpertTry(expert_store.ExpertIn):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+@app.post("/api/experts/preview")
+def try_expert(body: ExpertTry):
+    """Run a draft generate expert on a sample message without saving it, so a prompt can be tuned before it is kept."""
+    if not body.model or not body.system:
+        raise HTTPException(400, "Choose a model and write a system prompt first.")
+    draft = Expert(name=body.name or "draft", description=body.description, examples=body.examples, parameters={}, model={"id": body.model},
+                   license=body.license, kind="generate", system=body.system, shots=[s.model_dump() for s in body.shots], strip=body.strip)
+    t0 = time.perf_counter()
+    try:
+        return {"ok": True, "output": answer(draft, body.message, f"{OLLAMA}/v1", timeout=120), "ms": round((time.perf_counter() - t0) * 1000)}
+    except llm.LLMError as e:
+        return {"ok": False, "error": str(e)}
+    except (httpx.HTTPError, KeyError, ValueError):
+        return {"ok": False, "error": "The model did not answer. Is it running, and is its name right?"}
 
 
 @app.put("/api/experts/{name}")
