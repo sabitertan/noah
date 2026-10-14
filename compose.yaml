@@ -42,6 +42,8 @@ services:
       NOAH_LLM_URL: http://ollama:11434
       HF_TOKEN: ${HF_TOKEN:-}      # optional: use Hugging Face hosted models without typing the token in the UI
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}   # optional: same for OpenRouter
+      AZURE_FOUNDRY_ENDPOINT: ${AZURE_FOUNDRY_ENDPOINT:-}   # optional: Azure Foundry (https://<resource>.openai.azure.com) ...
+      AZURE_FOUNDRY_API_KEY: ${AZURE_FOUNDRY_API_KEY:-}     # ... and its key
     # Persisted state. For live-editing code, use the dev override:  make dev
     volumes:
       - ./data:/app/data:z

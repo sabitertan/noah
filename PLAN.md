@@ -148,3 +148,11 @@ user message
 - Models page tabs (2026-10-13): My models / Hugging Face / OpenRouter, the tab is part of the route (`#/models`, `#/models/hf`, `#/models/or`), other pages remember the last tab,
   provider panels are created on first visit and kept (search text and running downloads survive tab switches). 43 browser checks (HF + OpenRouter flows, tab URL, refresh,
   deep link, unknown tab, back button, state kept across tabs) + 43 + 21 earlier UI checks pass; screenshots regenerated.
+- Azure Foundry (2026-10-14): hosted-only (`az:<deployment>`), on the user's own resource via the OpenAI-compatible v1 route (`https://<resource>.openai.azure.com/openai/v1`, no
+  api-version, deployment name in `model`, key as Bearer; per Microsoft Learn "Endpoints for Microsoft Foundry Models"). Sign in with an API key or keyless through the Azure CLI
+  (`az account get-access-token --resource https://ai.azure.com`, cached until 2 min before expiry). The endpoint is user-supplied, so it is restricted to Azure host names before any
+  key is sent (https only, no userinfo/port, `*.openai|services.ai|cognitiveservices.azure.(com|us|cn)`). No public deployment listing exists, so deployments are added by name and
+  checked with Test. Reasoning deployments that reject max_tokens/temperature are retried with max_completion_tokens. Provider layer extended (`Provider.connector`, hooks in
+  `hosted.make`), new `noah/azure.py`, `AzurePanel.vue`, shared `lib/hostedActions.js`. 139 Python tests (41 new, network and `az` faked). The scratch browser scripts were lost when
+  the scratchpad was cleaned, so they were rebuilt as `scripts/ui_check.py` (72 checks across chat, routing, orchestrators, experts, all four providers, both Azure sign-in modes, tabs,
+  theme) against a stub of Ollama + HF + OpenRouter + Azure + a fake `az`. Not verified against a real Azure resource (no subscription here): request shape follows the docs only.

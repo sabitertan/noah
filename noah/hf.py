@@ -18,9 +18,9 @@ from pydantic import BaseModel
 from . import hosted, llm
 
 
-def _whoami(tok: str) -> str:
+def _whoami(body: hosted.TokenBody) -> str:
     try:
-        r = httpx.get(f"{llm.HF_HUB}/api/whoami-v2", headers={"Authorization": f"Bearer {tok}"}, timeout=10)
+        r = httpx.get(f"{llm.HF_HUB}/api/whoami-v2", headers={"Authorization": f"Bearer {body.token}"}, timeout=10)
     except httpx.HTTPError:
         raise HTTPException(502, "Could not reach Hugging Face to check the token.")
     if r.status_code != 200:

@@ -14,9 +14,9 @@ from . import hosted, llm
 _cache: tuple[float, list[dict]] | None = None
 
 
-def _check_key(key: str) -> str:
+def _check_key(body: hosted.TokenBody) -> str:
     try:
-        r = httpx.get(f"{llm.OR_BASE}/key", headers={"Authorization": f"Bearer {key}"}, timeout=10)
+        r = httpx.get(f"{llm.OR_BASE}/key", headers={"Authorization": f"Bearer {body.token}"}, timeout=10)
     except httpx.HTTPError:
         raise HTTPException(502, "Could not reach OpenRouter to check the key.")
     if r.status_code != 200:

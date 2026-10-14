@@ -1,4 +1,5 @@
 """Regenerate the README screenshots against a running server (default http://localhost:8765)."""
+import json
 import os
 import sys
 from playwright.sync_api import sync_playwright
@@ -66,5 +67,13 @@ with sync_playwright() as p:
     open_tab("or")
     hf.evaluate("document.querySelector('#v-models').scrollTop = 0"); hf.wait_for_timeout(300)
     hf.screenshot(path="docs/openrouter.png")
+    # Azure Foundry: your own resource, connect with a key or your Azure CLI login, add deployments by name (nothing is connected here)
+    for name in ("gpt-4o-mini", "my-llama"):
+        hf.request.post(f"{base}/api/az/my", data=json.dumps({"id": name}), headers={"Content-Type": "application/json"})
+    hf.goto(base + "/#/models/az"); hf.reload()   # the page learns about the new deployments from the server
+    hf.wait_for_selector("#azDeployments tr[data-model='az:my-llama']"); hf.evaluate("document.querySelector('#v-models').scrollTop = 0"); hf.wait_for_timeout(300)
+    hf.screenshot(path="docs/azure.png")
+    for name in ("gpt-4o-mini", "my-llama"):
+        hf.request.delete(f"{base}/api/az/my/{name}")
     hf.request.delete(f"{base}/api/hf/my/{hf_model}"); hf.request.delete(f"{base}/api/or/my/{or_model}")  # leave the server as we found it
     b.close()

@@ -188,3 +188,11 @@ th { color: var(--muted); font-weight: 400; }
 .tab .count { color: var(--muted); font-size: 11px; margin-left: 7px; }
 .tab .dot { margin-left: 7px; }
 .hf { margin-top: 8px; }
+.where.az { color: #c792ea; border-color: color-mix(in srgb, #c792ea 50%, transparent); }
+.choice { display: inline-flex; align-items: center; gap: 6px; color: var(--fg); cursor: pointer; }
+.choice input { width: auto; padding: 0; accent-color: var(--accent); }
+.hf td:last-child .rowact { justify-content: flex-end; }
+#azDeployments td:last-child { white-space: normal; }
+.rowact .fnote { flex: 1 1 100%; text-align: left; white-space: normal; margin: 0; }
+.hfrow .choice input { flex: none; min-width: 0; width: auto; }
+.hfrow .choice { margin-right: 14px; }

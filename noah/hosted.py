@@ -21,7 +21,9 @@ from . import llm
 
 
 class TokenBody(BaseModel):
-    token: str
+    token: str = ""
+    endpoint: str = ""   # Azure only: the resource URL
+    auth: str = "key"    # Azure only: "key" or "cli" (sign in with the Azure CLI)
 
 
 class ModelBody(BaseModel):
@@ -35,8 +37,10 @@ class Hosted:
     status: Callable[[], dict]
 
 
-def make(p: llm.Provider, validate: Callable[[str], str]) -> Hosted:
-    """`validate(secret)` returns the account name or raises HTTPException when the provider rejects the secret."""
+def make(p: llm.Provider, validate: Callable[[TokenBody], str], *, save_credentials: Callable[[TokenBody], None] | None = None,
+         clear_credentials: Callable[[], None] | None = None, status_fn: Callable[[], dict] | None = None) -> Hosted:
+    """`validate(body)` returns the account name or raises HTTPException when the provider rejects the credentials.
+    The hooks let a provider with more than a key (Azure: an endpoint and a sign-in method) store and report its own settings."""
     router = APIRouter(prefix=f"/api/{p.key}")
     models_file = lambda: Path(os.environ.get(p.models_env, p.models_default))  # noqa: E731  (read per call: tests and the desktop app set it late)
 
@@ -51,9 +55,10 @@ def make(p: llm.Provider, validate: Callable[[str], str]) -> Hosted:
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(json.dumps(ids, indent=1))
 
-    def status() -> dict:
+    def key_status() -> dict:
         secret, source = llm.token(p)
         return {"configured": bool(secret), "source": source}
+    status = status_fn or key_status
 
     def listing() -> dict:
         return {"models": [p.prefix + m for m in my_models()]}
@@ -64,18 +69,18 @@ def make(p: llm.Provider, validate: Callable[[str], str]) -> Hosted:
 
     @router.put("/token")
     def put_token(body: TokenBody):
-        tok = body.token.strip()
-        if not 8 <= len(tok) <= 300 or re.search(r"\s", tok):
+        body.token = body.token.strip()
+        if body.auth != "cli" and (not 8 <= len(body.token) <= 300 or re.search(r"\s", body.token)):
             raise HTTPException(400, f"That does not look like a {p.label} {p.secret}.")
-        name = validate(tok)
-        llm.save_token(tok, p)
+        name = validate(body)
+        (save_credentials or (lambda b: llm.save_token(b.token, p)))(body)
         return {**status(), "name": name}
 
     @router.delete("/token")
     def delete_token():
-        if llm.token(p)[1] == "env":
+        if status().get("source") == "env":
             raise HTTPException(400, f"The {p.secret} comes from the {p.envs[0]} environment variable; unset it there.")
-        llm.clear_token(p)
+        (clear_credentials or (lambda: llm.clear_token(p)))()
         return status()
 
     @router.post("/my")
@@ -84,7 +89,7 @@ def make(p: llm.Provider, validate: Callable[[str], str]) -> Hosted:
         if mid.startswith(p.prefix):
             mid = mid[len(p.prefix):]
         if not p.id_re.match(mid):
-            raise HTTPException(400, "Use the form organisation/model-name, e.g. Qwen/Qwen2.5-7B-Instruct.")
+            raise HTTPException(400, p.id_hint)
         ids = my_models()
         if mid not in ids:
             save([*ids, mid])

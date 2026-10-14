@@ -16,10 +16,12 @@ import httpx
 HF_PREFIX = "hf:"
 HF_ROUTER = os.environ.get("NOAH_HF_ROUTER", "https://router.huggingface.co/v1")
 HF_HUB = os.environ.get("NOAH_HF_HUB", "https://huggingface.co")
+AZ_PREFIX = "az:"
 OR_PREFIX = "or:"
 OR_BASE = os.environ.get("NOAH_OR_BASE", "https://openrouter.ai/api/v1")
 HF_ID = re.compile(r"^[\w.\-]+/[\w.\-]+(:[\w\-]+)?$")  # org/name, optionally :provider or :fastest / :cheapest
 OR_ID = re.compile(r"^~?[\w.\-]+/[\w.\-+~]+(:[\w\-]+)?$")  # org/name, optionally :free / :nitro / :floor
+AZ_ID = re.compile(r"^[\w.\-]{1,64}$")  # an Azure deployment name (the name you gave the deployment, not the model)
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,8 @@ class Provider:
     models_default: str
     id_re: re.Pattern
     errors: dict = field(default_factory=dict)  # HTTP status -> plain-words explanation ({name} = the model)
+    id_hint: str = "Use the form organisation/model-name, e.g. Qwen/Qwen2.5-7B-Instruct."
+    connector: str = ""      # module with connect() -> (base_url, headers), for providers whose endpoint and sign-in are per user
 
 
 HF = Provider("hf", "Hugging Face", HF_PREFIX, HF_ROUTER, "token", ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"),
@@ -56,7 +60,15 @@ OR = Provider("or", "OpenRouter", OR_PREFIX, OR_BASE, "API key", ("OPENROUTER_AP
     404: "{name} is not available on OpenRouter right now, or no provider serves it with these settings.",
     429: "OpenRouter is rate limiting this key (free models have low limits). Wait a moment and retry.",
 })
-PROVIDERS = (HF, OR)
+AZ = Provider("az", "Azure Foundry", AZ_PREFIX, "", "API key", ("AZURE_FOUNDRY_API_KEY", "AZURE_OPENAI_API_KEY", "AZURE_INFERENCE_CREDENTIAL"),
+              "NOAH_AZ_TOKEN_FILE", "data/azure_key", "NOAH_AZ_MODELS", "data/azure_models.json", AZ_ID, {
+    400: "Azure Foundry could not run deployment {name} with this request (it may not support tools or structured output).",
+    401: "Azure Foundry rejected the credentials. Check the key, or that key access is enabled on the resource (otherwise sign in with the Azure CLI).",
+    403: "Your Azure identity may lack a role on this resource (for example Cognitive Services OpenAI User), or the content filter blocked the request.",
+    404: "No deployment named {name} on this resource. Use the deployment name from the Foundry portal, not the model name.",
+    429: "Azure Foundry is rate limiting this deployment (quota). Wait a moment and retry.",
+}, "Use the deployment name from the Foundry portal, e.g. gpt-4o-mini or my-llama.", "azure")
+PROVIDERS = (HF, OR, AZ)
 
 
 class LLMError(RuntimeError):
@@ -122,6 +134,10 @@ def resolve(base_url: str, model: str) -> tuple[str, str, dict]:
     p = provider_of(model)
     if p is None:
         return base_url, model, {}
+    if p.connector:  # endpoint and credentials are the user's own (Azure): the connector builds both
+        import importlib
+        base, headers = importlib.import_module(f"noah.{p.connector}").connect()
+        return base, model[len(p.prefix):], headers
     tok, _ = token(p)
     if not tok:
         raise LLMError(f"This model runs on {p.label} but no {p.secret} is set. Add one on the Models page.")
@@ -143,7 +159,23 @@ def chat(base_url: str, body: dict, timeout: float) -> dict:
         r.raise_for_status()
     except httpx.HTTPStatusError as e:
         p = provider_of(model)
+        if p is AZ and e.response.status_code == 400 and (retry := _newer_model_body(body, e.response)):
+            return chat(base_url, retry, timeout)  # reasoning models want max_completion_tokens and the default temperature
         if p:
             raise LLMError(_explain(p, e.response.status_code, model), e.response.status_code) from None  # never echo headers
         raise
     return r.json()
+
+
+def _newer_model_body(body: dict, response: httpx.Response) -> dict | None:
+    """Azure's newer (reasoning) models reject max_tokens and a custom temperature. Retry once without them."""
+    try:
+        text = response.text.lower()
+    except Exception:
+        return None
+    if "max_completion_tokens" not in text and "temperature" not in text:
+        return None
+    fixed = {k: v for k, v in body.items() if k not in ("max_tokens", "temperature")}
+    if "max_tokens" in body:
+        fixed["max_completion_tokens"] = max(int(body["max_tokens"]), 256)  # reasoning tokens count against the limit
+    return fixed if fixed != body else None

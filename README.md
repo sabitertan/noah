@@ -2,7 +2,7 @@
 
 Layered tiny-model orchestration. You pick a **decision engine** and an **orchestrator**; each job goes to a
 small **expert** (a tiny model, a tool, or both). Every decision is traced, so you can later fine-tune your own.
-Models can run locally (Ollama) or hosted by Hugging Face or OpenRouter, chosen per model. There is a web UI, a desktop app and a CLI.
+Models can run locally (Ollama) or hosted by Hugging Face, OpenRouter or your own Azure Foundry resource, chosen per model. There is a web UI, a desktop app and a CLI.
 
 ```
 message -> [decision engine] -> [orchestrator: Microsoft Agent Framework workflow] -> [expert(s)] -> answer
@@ -25,7 +25,7 @@ Files expert: open a file right in the chat, or get download / open-with-app opt
 |---|---|
 | ![C# expert answering with a code block](docs/code.png) | ![Orchestrators page with a profile editor](docs/orchestrators.png) |
 
-Models page, tab **My models**: every model is labelled by where it runs: local (Ollama), or hosted by Hugging Face or OpenRouter. Hugging Face and OpenRouter have their own tabs.
+Models page, tab **My models**: every model is labelled by where it runs: local (Ollama), or hosted by Hugging Face, OpenRouter or Azure Foundry. Each provider has its own tab.
 
 ![Models page listing local models and hosted ones from Hugging Face and OpenRouter, each labelled with where it runs](docs/models.png)
 
@@ -37,6 +37,10 @@ OpenRouter: search its catalogue, see what each model supports and costs, and us
 
 ![OpenRouter search results with tool-call, structured-output and log-prob support and prices per million tokens](docs/openrouter.png)
 
+Azure Foundry: connect your own Azure resource with an API key or your Azure CLI sign-in, then add the deployments you created there.
+
+![Azure Foundry tab with the connection form and a list of deployments, each with Test and Remove](docs/azure.png)
+
 Regenerate them against a running server with `python scripts/readme_shots.py` (needs `pip install -e ".[dev]"` plus `playwright install chromium`, or `CHROMIUM=/path/to/chromium`).
 
 ## Using the web UI
@@ -46,7 +50,7 @@ Regenerate them against a running server with `python scripts/readme_shots.py` (
 | Chat | Ask anything; pick an orchestrator and Route / Fan-out; open "routing decision" to see every expert's score; file results open in place | `#/chat`, `#/chat/<id>` |
 | Orchestrators | Cards for saved profiles with an on/off switch each; the editor below changes a draft that the selected card shows live ("unsaved") until you Save | `#/orch` |
 | Experts | Every expert with its examples and an on/off switch | `#/experts` |
-| Models | Three tabs: **My models** (every model and where it runs), **Hugging Face** and **OpenRouter** (add hosted models; download GGUFs from Hugging Face) | `#/models`, `#/models/hf`, `#/models/or` |
+| Models | Tabs: **My models** (every model and where it runs), **Hugging Face** (hosted or GGUF download), **OpenRouter** and **Azure Foundry** (hosted) | `#/models`, `#/models/hf`, `#/models/or`, `#/models/az` |
 | Traces | Every routing decision, the raw material for fine-tuning | `#/traces` |
 
 The sidebar shows how many orchestrators and experts are enabled (for example `5/7`). The page is kept in the URL, so a
@@ -128,7 +132,8 @@ ollama pull qwen2.5:0.5b && ollama pull qwen2.5-coder:1.5b
 uvicorn noah.server:app --port 8765              # NOAH_LLM_URL=http://host:port to point elsewhere
 # while developing, reload on any Python/YAML change:
 uvicorn noah.server:app --port 8765 --reload --reload-include "*.yaml"
-pytest
+pytest                                           # Python tests
+python scripts/ui_check.py                       # drives the real web UI in Chromium against a stubbed Ollama / Hugging Face / OpenRouter / Azure (needs the UI built and playwright)
 python -m noah.cli ask "calculate 15% of 240" --engine embedding
 ```
 
@@ -220,28 +225,39 @@ Laya is meant to be fine-tuned, and Noah's traces can serve as the training data
 Check each model's license before use: a third-party listing says Nemotron-Orchestrator-8B is research-only, and
 FunctionGemma is under the Gemma terms.
 
-## Hosted and local models (Hugging Face, OpenRouter, Ollama)
+## Hosted and local models (Hugging Face, OpenRouter, Azure Foundry, Ollama)
 
 Every place that takes a model (orchestrator model, tiny argument model, generate experts) accepts any kind, and
-the **Models** page shows which is which ("Local · Ollama", "Hugging Face · hosted" or "OpenRouter · hosted"):
+the **Models** page shows which is which ("Local · Ollama", "Hugging Face · hosted", "OpenRouter · hosted" or "Azure Foundry · hosted"):
 
 | | Where it runs | Needs | Name |
 |---|---|---|---|
 | **Local** | Ollama on this machine | a download (GGUF) | `qwen2.5:0.5b`, `hf.co/unsloth/Qwen3-4B-GGUF:Q4_K_M` |
 | **Hugging Face hosted** | Hugging Face Inference Providers, through their API. Nothing is downloaded. | a token | `hf:Qwen/Qwen2.5-7B-Instruct` |
 | **OpenRouter hosted** | OpenRouter, through its API (it has nothing to download). | an API key | `or:meta-llama/llama-3.3-70b-instruct:free` |
+| **Azure Foundry hosted** | A deployment on your own Azure resource, through its OpenAI-compatible v1 route. | an endpoint and an API key or `az login` | `az:my-gpt-4o-mini` (your deployment name) |
 
-On **Models**, each provider has its own tab (Hugging Face, OpenRouter): paste your key, search, and press **Use hosted**. The model then
-appears in every model dropdown (grouped by where it runs) and gets a **Test** button. Searching shows what each model
-supports (tool calls, structured output, log-probs), its price per million tokens and its context size. For
+On **Models**, each provider has its own tab. Hugging Face and OpenRouter: paste your key, search, and press **Use hosted**.
+The model then appears in every model dropdown (grouped by where it runs) and gets a **Test** button. Searching shows what
+each model supports (tool calls, structured output, log-probs), its price per million tokens and its context size. For
 Hugging Face you can instead press **Download…**, pick a quantisation (sizes shown) and watch Ollama pull it; it then
 becomes a local model.
 
-- **Keys.** Hugging Face: a token from huggingface.co/settings/tokens with the "Make calls to Inference Providers" permission. OpenRouter: a key from openrouter.ai/keys. Paste it on the Models page, or set `HF_TOKEN` / `OPENROUTER_API_KEY` (compose passes both through). A pasted key is stored in `data/hf_token` or `data/openrouter_key` (owner-only, git-ignored) and is never sent back to the browser. Each provider only ever receives its own key.
+**Azure Foundry** has no public catalogue, because the models are the deployments you created. On its tab, enter your
+resource endpoint (`https://<resource>.openai.azure.com` or `https://<resource>.services.ai.azure.com`), choose how to sign in, and
+add each **deployment name** (the name you gave it in the Foundry portal, not the model name). It works for OpenAI models and for
+others you deployed there (Llama, DeepSeek, Grok, …). Sign in with an **API key** (stored in a private file) or with your
+**Azure CLI login** (`az login`; keyless through Microsoft Entra ID, so no key is stored and Noah asks `az` for a short-lived token
+when needed; your identity needs a role such as Cognitive Services OpenAI User on the resource). Noah only sends the key to hosts
+that look like Azure endpoints (`*.openai.azure.com`, `*.services.ai.azure.com`, `*.cognitiveservices.azure.com`, and the `.us` / `.cn`
+clouds), so a mistyped URL cannot leak it. Newer reasoning deployments that reject `max_tokens` or a custom temperature are retried
+with the parameters they accept.
+
+- **Keys.** Hugging Face: a token from huggingface.co/settings/tokens with the "Make calls to Inference Providers" permission. OpenRouter: a key from openrouter.ai/keys. Azure: the key under your resource's "Keys and Endpoint". Paste it on the Models page, or set `HF_TOKEN`, `OPENROUTER_API_KEY`, or `AZURE_FOUNDRY_ENDPOINT` + `AZURE_FOUNDRY_API_KEY` (compose passes them through). A pasted key is stored in `data/hf_token`, `data/openrouter_key` or `data/azure_key` (owner-only, git-ignored) and is never sent back to the browser. Each provider only ever receives its own key.
 - **Any id works by hand**, including suffixes such as `Qwen/Qwen2.5-7B-Instruct:fastest` (Hugging Face) or `meta-llama/llama-3.3-70b-instruct:free` / `:nitro` (OpenRouter).
 - **Privacy and cost.** Hosted models send your messages (and the expert list, for orchestrators) to the provider and the model host, and may cost credits. Local models never leave the machine. The UI says so next to each key box.
 - **Pick by capability.** Orchestrators (`llm_tools`) need **tool calls**; the argument extractor uses structured output and falls back to tool calls. The `llm_choice` decision engine reads token log-probabilities, so choose a model marked **log-probs** (or a local one).
-- **Clear errors.** A bad key, no credits, a rate limit or a model the provider does not serve is explained in plain words instead of silently falling back to the rule extractor.
+- **Clear errors.** A bad key, no credits, a rate limit, a missing deployment or a model the provider does not serve is explained in plain words instead of silently falling back to the rule extractor.
 
 ## Files expert
 

@@ -17,7 +17,7 @@ from . import filesvc
 from .engines import make_engine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
-from . import hf, llm, openrouter
+from . import azure, hf, llm, openrouter
 from .orchestrator import Orchestrator
 from .registry import load_experts
 from .trace import TraceStore
@@ -82,6 +82,7 @@ async def launch_guard(request: Request, call_next):
 
 app.include_router(hf.router)
 app.include_router(openrouter.router)
+app.include_router(azure.router)
 app.mount("/assets", StaticFiles(directory=WEB / "assets", check_dir=False), name="assets")  # content-hashed JS/CSS/fonts
 PROFILES = Path(os.environ.get("NOAH_PROFILES", "data/profiles.json"))
 DEFAULT_PROFILES = [
@@ -178,6 +179,8 @@ def config(request: Request):
         "hf_models": [llm.HF_PREFIX + m for m in hf.my_models()],  # hosted models the user added
         "or": openrouter.status(),
         "or_models": [llm.OR_PREFIX + m for m in openrouter.my_models()],
+        "az": azure.status(),  # endpoint is not secret; the key never leaves the server
+        "az_models": [llm.AZ_PREFIX + m for m in azure.my_models()],
         "experts": [{"name": e.name, "description": e.description, "license": e.license,
                      "parameters": e.parameters, "examples": e.examples,
                      "kind": e.kind, "model": e.model.get("id", ""),

@@ -60,6 +60,7 @@ async function startServer() {
       NOAH_TRACES: path.join(data, 'traces.jsonl'), NOAH_FILES_DIR: files,
       NOAH_HF_TOKEN_FILE: path.join(data, 'hf_token'), NOAH_HF_MODELS: path.join(data, 'hf_models.json'),
       NOAH_OR_TOKEN_FILE: path.join(data, 'openrouter_key'), NOAH_OR_MODELS: path.join(data, 'openrouter_models.json'),
+      NOAH_AZ_TOKEN_FILE: path.join(data, 'azure_key'), NOAH_AZ_SETTINGS: path.join(data, 'azure_foundry.json'), NOAH_AZ_MODELS: path.join(data, 'azure_models.json'),
       FASTEMBED_CACHE_PATH: path.join(app.getPath('userData'), 'models') };
   }
   server = spawn(cmd, args, {

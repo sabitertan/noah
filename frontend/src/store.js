@@ -5,11 +5,11 @@ import { send, getJson, store } from './lib/api.js';
 export const MODEL_ENGINES = ['llm_tools', 'llm_choice', 'laya'];  // engines that take an engine_model
 export const TITLES = { orch: 'Orchestrators', experts: 'Experts', models: 'Models', traces: 'Traces' };
 export const VIEWS = ['chat', ...Object.keys(TITLES)];
-export const MODEL_TABS = ['local', 'hf', 'or'];  // Models page: my models, Hugging Face, OpenRouter
+export const MODEL_TABS = ['local', 'hf', 'or', 'az'];  // Models page: my models, Hugging Face, OpenRouter, Azure Foundry
 export const isOn = p => p.enabled !== false;  // profiles saved before the switch existed count as enabled
 
 /* ---------- state ---------- */
-export const cfg = ref({ engines: [], modes: [], extractors: [], models: [], experts: [], local: false, hf: {}, or: {}, hf_models: [], or_models: [] });
+export const cfg = ref({ engines: [], modes: [], extractors: [], models: [], experts: [], local: false, hf: {}, or: {}, az: {}, hf_models: [], or_models: [], az_models: [] });
 export const profiles = ref([]);
 export const chats = ref(store.get('chats', []));
 export const currentChat = ref(store.get('current', null));
@@ -25,7 +25,7 @@ export const enabledProfiles = computed(() => profiles.value.filter(isOn));
 export const current = computed(() => enabledProfiles.value.find(p => p.name === activeProfile.value) || enabledProfiles.value[0]);  // never a disabled one
 export const chatObj = computed(() => chats.value.find(c => c.id === currentChat.value));
 export const messages = computed(() => chatObj.value?.messages || []);
-export const hostedModels = computed(() => [...(cfg.value.hf_models || []), ...(cfg.value.or_models || [])]);  // 'hf:…' / 'or:…' ids the user added
+export const hostedModels = computed(() => [...(cfg.value.hf_models || []), ...(cfg.value.or_models || []), ...(cfg.value.az_models || [])]);  // 'hf:…' / 'or:…' / 'az:…' ids the user added
 export const enabledExpertCount = computed(() => cfg.value.experts.filter(e => e.enabled).length);
 
 /* ---------- routing: the URL hash is the route (#/orch, #/chat/<id>) so refresh, back/forward and deep links work ---------- */

@@ -1,10 +1,11 @@
 <script setup>
 // Every model Noah can use, and where each one is served from: this machine (Ollama) or a hosted provider's API.
-import { ref, computed, reactive, watch } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import HostedPanel from './HostedPanel.vue';
+import AzurePanel from './AzurePanel.vue';
 import GgufDownloads from './GgufDownloads.vue';
 import { norm, hostedKind, PROVIDERS } from '../lib/format.js';
-import { send } from '../lib/api.js';
+import { tests, testModel as test, removeModel as remove } from '../lib/hostedActions.js';
 import { cfg, hostedModels, profiles, isOn, modelsTab, openModelsTab } from '../store.js';
 
 const rows = () => [...cfg.value.models.map(id => ({ id, kind: '' })), ...hostedModels.value.map(id => ({ id, kind: hostedKind(id) }))];
@@ -16,32 +17,20 @@ const usedByOrchestrators = m => profiles.value.flatMap(p => [
 const usedByExperts = m => cfg.value.experts.filter(e => e.kind === 'generate' && norm(e.model) === norm(m)).map(e => e.name);
 
 // tabs: panels are created the first time you open them and then kept, so a half-typed search or a running download survives switching tabs
-const seen = reactive({ local: true, hf: false, or: false });
+const seen = reactive({ local: true, hf: false, or: false, az: false });
 watch(modelsTab, t => { seen[t] = true; }, { immediate: true });
 const tabs = computed(() => [
   { id: 'local', label: 'My models', count: cfg.value.models.length + hostedModels.value.length },
   { id: 'hf', label: 'Hugging Face', count: (cfg.value.hf_models || []).length, key: cfg.value.hf?.configured },
   { id: 'or', label: 'OpenRouter', count: (cfg.value.or_models || []).length, key: cfg.value.or?.configured },
+  { id: 'az', label: 'Azure Foundry', count: (cfg.value.az_models || []).length, key: cfg.value.az?.configured },
 ]);
 
-const tests = ref({});  // model id -> { busy } | { ok, text }
-async function test(id) {
-  tests.value[id] = { busy: true };
-  try {
-    const j = await (await send(`/api/${hostedKind(id)}/test`, 'POST', { id })).json();
-    tests.value[id] = j.ok ? { ok: true, text: `works: “${j.reply}” in ${j.ms} ms` } : { ok: false, text: j.error || j.detail };
-  } catch (e) { tests.value[id] = { ok: false, text: e.message }; }
-}
-async function remove(id) {
-  const kind = hostedKind(id);
-  const r = await fetch(`/api/${kind}/my/` + id.slice(PROVIDERS[kind].prefix.length), { method: 'DELETE' });
-  if (r.ok) cfg.value[kind + '_models'] = (await r.json()).models;
-}
 </script>
 
 <template>
   <section class="view active" id="v-models"><div class="panel" id="modelsPanel">
-    <h2>Models</h2><p class="lede">Each model runs either <b>locally</b> (Ollama, downloaded to this machine) or <b>hosted</b> by Hugging Face or OpenRouter (called through their API with your own key, nothing downloaded). Pick either kind anywhere a model is chosen. Any OpenAI-compatible local server works too.</p>
+    <h2>Models</h2><p class="lede">Each model runs either <b>locally</b> (Ollama, downloaded to this machine) or <b>hosted</b> by Hugging Face, OpenRouter or your own Azure Foundry resource (called through their API with your own key, nothing downloaded). Pick either kind anywhere a model is chosen. Any OpenAI-compatible local server works too.</p>
 
     <div class="tabs" role="tablist">
       <button v-for="t in tabs" :key="t.id" class="tab" :class="{ active: modelsTab === t.id }" role="tab" :aria-selected="modelsTab === t.id" :data-tab="t.id" @click="openModelsTab(t.id)">
@@ -64,7 +53,7 @@ async function remove(id) {
           <td><div v-for="u in usedByExperts(m.id)" :key="u">{{ u }}</div><span v-if="!usedByExperts(m.id).length" class="meta">—</span></td>
         </tr></tbody>
       </table>
-      <p v-else class="lede">No models yet. Is Ollama running? Or add a hosted model from the Hugging Face or OpenRouter tab.</p>
+      <p v-else class="lede">No models yet. Is Ollama running? Or add a hosted model from one of the provider tabs.</p>
     </div>
 
     <HostedPanel v-if="seen.hf" v-show="modelsTab === 'hf'" provider="hf" search-hint="Search Hugging Face models, e.g. qwen, llama, gemma…" manual-hint="Or any model id, e.g. Qwen/Qwen2.5-7B-Instruct:fastest"
@@ -73,5 +62,6 @@ async function remove(id) {
     </HostedPanel>
     <HostedPanel v-if="seen.or" v-show="modelsTab === 'or'" provider="or" search-hint="Search OpenRouter models, e.g. llama, gpt, claude, free…" manual-hint="Or any model id, e.g. meta-llama/llama-3.3-70b-instruct:free"
       help="Needed for hosted models. Create a key at openrouter.ai/keys." />
+    <AzurePanel v-if="seen.az" v-show="modelsTab === 'az'" />
   </div></section>
 </template>
