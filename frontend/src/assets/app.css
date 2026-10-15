@@ -136,6 +136,8 @@ th { color: var(--muted); font-weight: 400; }
 .fbody { margin: 8px 0 0; padding: 8px 10px; background: var(--bg); border-radius: 8px; max-height: 340px; overflow: auto; white-space: pre-wrap; font: inherit; }
 .fbody.md { white-space: pre-wrap; }
 .fscroll { margin-top: 8px; max-height: 340px; overflow: auto; border-radius: 8px; background: var(--bg); }
+.fimage { display: block; margin-top: 8px; width: fit-content; max-width: 100%; }
+.fimage img { display: block; max-width: 100%; max-height: 512px; border-radius: 8px; background: var(--bg); }
 .ftable th, .ftable td { white-space: nowrap; padding: 4px 10px; }
 .ftable th { color: var(--accent); position: sticky; top: 0; background: var(--bg); }
 .fnote, .fmsg { color: var(--muted); font-size: 12px; margin-top: 6px; }

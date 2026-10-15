@@ -375,6 +375,16 @@ def file_download(path: str):
                         headers={"X-Content-Type-Options": "nosniff"})
 
 
+@app.get("/api/files/image")
+def file_image(path: str):
+    """Raster images inline, for previews in the chat. Anything else (SVG included) only ever downloads."""
+    p = _file_or_404(path)
+    if filesvc.kind_of(p) != "image":
+        raise HTTPException(400, "not an image; download it instead")
+    return FileResponse(p, media_type=filesvc.IMAGE_TYPES[p.suffix.lower()],
+                        headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox"})
+
+
 @app.post("/api/files/open")
 def file_open(req: OpenRequest, request: Request):
     """Open with the OS default app. Only meaningful (and only allowed) on the machine running Noah."""

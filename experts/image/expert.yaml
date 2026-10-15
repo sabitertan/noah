@@ -1,0 +1,19 @@
+name: image
+description: Generates a new picture from a text description (illustration, photo, logo, poster, wallpaper, artwork) with a local image model.
+examples:
+  - draw a red fox in a snowy forest
+  - generate an image of a cyberpunk city at night
+  - create a logo for a coffee shop called Bean There
+  - make a watercolor painting of a lighthouse
+  - paint a portrait of a cat wearing a crown
+  - design a poster that says Summer Sale
+parameters:
+  type: object
+  properties:
+    prompt: {type: string, description: "What the picture should show, in the user's words"}
+    shape: {type: string, enum: [square, landscape, portrait], description: Picture shape}
+  required: [prompt]
+# The picture comes from a stable-diffusion.cpp server (sd-server) at NOAH_IMAGE_URL (default http://localhost:1234),
+# started with unsloth/Qwen-Image-2.1-GGUF: see "Image expert" in the README. Images are saved in the files folder.
+model: {backend: rule}
+license: Qwen Research License (Qwen-Image-2.1, non-commercial); tool code MIT

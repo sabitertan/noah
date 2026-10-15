@@ -5,7 +5,7 @@ import { humanSize } from '../lib/format.js';
 import { send } from '../lib/api.js';
 
 const props = defineProps({ file: Object, local: Boolean });
-const fileIcon = { markdown: 'M↓', text: 'TXT', csv: 'CSV', pdf: 'PDF', binary: '···' };
+const fileIcon = { markdown: 'M↓', text: 'TXT', csv: 'CSV', pdf: 'PDF', image: 'IMG', binary: '···' };
 const preview = ref(props.file.preview || null), loading = ref(false), err = ref(''), msg = ref('');
 const icon = computed(() => fileIcon[props.file.kind] || '···');
 const href = computed(() => '/api/files/download?path=' + encodeURIComponent(props.file.path));

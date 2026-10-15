@@ -41,6 +41,10 @@ LABELLED = [
     ("write CSS for a responsive grid", "css"),
     ("how do I animate a button on hover with css", "css"),
     ("explain css specificity and the cascade", "css"),
+    ("draw a dragon flying over a castle", "image"),
+    ("generate a picture of a sunset on the beach", "image"),
+    ("make a logo for my bakery", "image"),
+    ("create an illustration of a robot reading a book", "image"),
 ]
 
 

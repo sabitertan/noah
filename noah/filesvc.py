@@ -13,11 +13,14 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 TEXT_EXT = {".txt", ".log", ".json", ".yaml", ".yml"}
 MARKDOWN_EXT = {".md", ".markdown"}
 CSV_EXT = {".csv", ".tsv"}
 PDF_EXT = {".pdf"}
+IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}  # raster only: an SVG can carry script, so it is never shown inline
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 # Safe to hand to the OS "open with default app": documents, images, media. Never executables or scripts.
 OPENABLE_EXT = TEXT_EXT | MARKDOWN_EXT | CSV_EXT | PDF_EXT | {
     ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".rtf",
@@ -27,6 +30,7 @@ TEXT_BYTES = 100_000       # read at most this much of a text file for a preview
 CSV_BYTES = 200_000
 CSV_ROWS, CSV_COLS = 50, 20
 PDF_PAGES, PDF_CHARS, PDF_MAX_BYTES = 5, 20_000, 25_000_000
+IMAGE_MAX_BYTES = 30_000_000
 LIST_LIMIT = 8
 
 
@@ -61,6 +65,8 @@ def kind_of(p: Path) -> str:
         return "csv"
     if ext in PDF_EXT:
         return "pdf"
+    if ext in IMAGE_EXT:
+        return "image"
     return "binary"
 
 
@@ -129,6 +135,11 @@ def preview(p: Path) -> dict[str, Any]:
         return _preview_csv(p)
     if kind == "pdf":
         return _preview_pdf(p)
+    if kind == "image":
+        if p.stat().st_size > IMAGE_MAX_BYTES:
+            return {"kind": "image", "error": "This image is too large to show here."}
+        rel = p.relative_to(files_root()).as_posix()
+        return {"kind": "image", "url": "/api/files/image?path=" + quote(rel, safe="")}
     return {"kind": "binary", "error": f"I can't preview {p.suffix.lower() or 'this'} files here."}
 
 

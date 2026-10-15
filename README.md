@@ -309,6 +309,44 @@ When several files match, you get a list with an **Open** button on each.
 - Keep an expert's `examples` file-specific. Generic phrases such as "open my ..." or "show me ..." also match small
   talk and pushed off-topic messages above the routing threshold (0.70 vs 0.57 once fixed).
 
+## Image expert
+
+The `image` expert draws a picture from a description ("draw a red fox in a snowy forest", "make a wide wallpaper of
+mountains") and shows it in the chat. The picture is saved in the files folder under `generated/`, so it can also be
+downloaded, opened with an app, or found again with the files expert.
+
+It runs locally through [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)'s `sd-server`, which
+runs GGUF image models on a small GPU by streaming weights from RAM. One script downloads everything and starts it:
+
+```bash
+scripts/image_server.sh             # Qwen-Image-2.1, unsloth GGUF Q4_K_M (~10 GB download)
+scripts/image_server.sh qwen-turbo  # Qwen-Image-2.1-Turbo: the same model distilled to 8 steps (+4 GB if you have the above)
+scripts/image_server.sh zimage      # Z-Image-Turbo, unsloth GGUF Q4_K_M (~8 GB download, 8 steps, Apache-2.0)
+```
+
+| Preset | Model | Text encoder | Steps | License |
+|---|---|---|---|---|
+| `qwen` (default) | [unsloth/Qwen-Image-2.1-GGUF](https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF) | Qwen3-VL-8B (UD-Q4_K_XL) | 20, CFG 6 | **Qwen Research License: non-commercial** |
+| `qwen-turbo` | [unsloth/Qwen-Image-2.1-Turbo-GGUF](https://huggingface.co/unsloth/Qwen-Image-2.1-Turbo-GGUF) | Qwen3-VL-8B (UD-Q4_K_XL) | 8, CFG 1 | **Qwen Research License: non-commercial** |
+| `zimage` | [unsloth/Z-Image-Turbo-GGUF](https://huggingface.co/unsloth/Z-Image-Turbo-GGUF) | Qwen3-4B (UD-Q4_K_XL) | 8, CFG 1 | Apache-2.0 |
+
+Qwen-Image-2.1 (September 2026) is the top open-weight model on the Artificial Analysis text-to-image arena and the most
+trending one on Hugging Face (October 2026), with strong text rendering and transparent (RGBA) output. Use Z-Image-Turbo
+for commercial use.
+
+Speed depends heavily on the GPU. On a GTX 1070 (8 GB, Vulkan, no fp16) the full `qwen` preset takes about 105 s per
+step, so roughly 35 minutes per picture; `qwen-turbo` takes about 67 s per step (about 17 minutes for the first
+1024×1024 picture, model loading included), so use it or `zimage` there. Requests wait up to an hour
+(`NOAH_IMAGE_TIMEOUT`, in seconds).
+
+- The server listens on `127.0.0.1:1234`; point Noah elsewhere with `NOAH_IMAGE_URL`. Any server with an OpenAI-style
+  `POST /v1/images/generations` that returns `b64_json` works.
+- Files go to `~/.cache/noah/image` (`NOAH_IMAGE_DIR`). The script fetches sd.cpp's Linux Vulkan build (NVIDIA, AMD and
+  Intel GPUs). On Windows or macOS, or for a CUDA build, set `SD_SERVER=/path/to/sd-server`. Extra flags go in `SD_ARGS`.
+- Pictures are about one megapixel: square 1024×1024, landscape 1344×768 or portrait 768×1344, picked from words such
+  as "wide", "wallpaper", "tall" or "portrait". The first request loads the models, so it is slower.
+- Ollama's own image generation (`x/z-image-turbo`, `x/flux2-klein`) is still experimental and macOS-only, so it is not used here.
+
 ## Adding and editing experts
 
 **In the web UI** (Experts page): press **New expert** to create a *generate* expert, or select any expert to edit it. You
