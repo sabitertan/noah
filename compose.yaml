@@ -44,6 +44,10 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}   # optional: same for OpenRouter
       AZURE_FOUNDRY_ENDPOINT: ${AZURE_FOUNDRY_ENDPOINT:-}   # optional: Azure Foundry (https://<resource>.openai.azure.com) ...
       AZURE_FOUNDRY_API_KEY: ${AZURE_FOUNDRY_API_KEY:-}     # ... and its key
+      # image expert: sd-server on the host (scripts/image_server.sh with NOAH_IMAGE_HOST=0.0.0.0; a container cannot reach host loopback)
+      NOAH_IMAGE_URL: ${NOAH_IMAGE_URL:-http://host.docker.internal:1234}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Docker on Linux needs this; Docker Desktop and Podman define the name themselves
     # Persisted state. For live-editing code, use the dev override:  make dev
     volumes:
       - ./data:/app/data:z

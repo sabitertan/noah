@@ -7,13 +7,14 @@
 #   scripts/image_server.sh qwen-turbo # Qwen-Image-2.1-Turbo (unsloth GGUF, Q4_K_M): same model distilled to 8 steps, ~5x faster
 #   scripts/image_server.sh zimage     # Z-Image-Turbo (unsloth GGUF, Q4_K_M): ~8 GB, 8 steps so much faster, Apache-2.0
 #
-# Env: NOAH_IMAGE_DIR (where files go, default ~/.cache/noah/image), NOAH_IMAGE_PORT (1234),
+# Env: NOAH_IMAGE_DIR (where files go, default ~/.cache/noah/image), NOAH_IMAGE_HOST (127.0.0.1), NOAH_IMAGE_PORT (1234),
 #      SD_SERVER (use your own sd-server, e.g. a CUDA build), SD_ARGS (extra sd-server flags), HF_TOKEN (optional).
 set -euo pipefail
 
 PRESET="${1:-qwen}"
 DIR="${NOAH_IMAGE_DIR:-$HOME/.cache/noah/image}"
 PORT="${NOAH_IMAGE_PORT:-1234}"
+HOST="${NOAH_IMAGE_HOST:-127.0.0.1}"   # 0.0.0.0 when Noah runs in a container (make up): it cannot reach the host's loopback
 SD_RELEASE="${SD_RELEASE:-master-964-1d0a58a}"   # stable-diffusion.cpp release with Qwen-Image-2.1 and Z-Image support
 HF="https://huggingface.co"
 
@@ -67,9 +68,9 @@ fi
 read -r m_repo m_file <<<"$MODEL"; read -r v_repo v_file <<<"$VAE"; read -r l_repo l_file <<<"$LLM"
 model="$(fetch "$m_repo" "$m_file")"; vae="$(fetch "$v_repo" "$v_file")"; llm="$(fetch "$l_repo" "$l_file")"
 
-echo "Starting sd-server ($PRESET) on http://127.0.0.1:$PORT" >&2
+echo "Starting sd-server ($PRESET) on http://$HOST:$PORT" >&2
 export LD_LIBRARY_PATH="$(dirname "$(readlink -f "$SERVER")")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 # --offload-to-cpu keeps weights in RAM and streams them to the GPU, so an 8 GB card runs models that do not fit in VRAM
 # shellcheck disable=SC2086
 exec "$SERVER" --diffusion-model "$model" --vae "$vae" --llm "$llm" "${SAMPLING[@]}" \
-  --offload-to-cpu --flash-attn off,diffusion=on --listen-ip 127.0.0.1 --listen-port "$PORT" ${SD_ARGS:-}
+  --offload-to-cpu --flash-attn off,diffusion=on --listen-ip "$HOST" --listen-port "$PORT" ${SD_ARGS:-}

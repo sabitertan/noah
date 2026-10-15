@@ -65,6 +65,8 @@ make up            # builds the image, starts Ollama, pulls the tiny models, sta
 ```
 
 `make` auto-detects Docker or Podman. First start downloads about 1.5 GB of models; later starts are instant.
+Next time, `make up` again is all it takes (Ctrl+C or `make down` stops it). Only one Noah can use port 8765: stop the
+containers before starting the server by hand (below), or give that one another `--port`.
 
 | You use | Needs |
 |---|---|
@@ -136,6 +138,20 @@ pytest                                           # Python tests
 python scripts/ui_check.py                       # drives the real web UI in Chromium against a stubbed Ollama / Hugging Face / OpenRouter / Azure (needs the UI built and playwright)
 python -m noah.cli ask "calculate 15% of 240" --engine embedding
 ```
+
+**Starting it again later** (setup done once): two terminals, from the project folder.
+
+```bash
+ollama serve                                       # terminal 1 (skip if Ollama already runs as a service)
+. .venv/bin/activate && uvicorn noah.server:app --port 8765   # terminal 2, then open http://localhost:8765
+scripts/image_server.sh qwen-turbo                 # optional terminal 3: the image expert's server (see "Image expert")
+```
+
+- `ollama: command not found`: Ollama is installed somewhere not on your PATH (for example a user-local
+  `~/tools/ollama/bin/ollama`). Run it by its full path, or add its folder to PATH in `~/.profile`.
+- `uvicorn: command not found`: the venv is not active (`. .venv/bin/activate`), or run `.venv/bin/uvicorn` directly.
+- `address already in use`: something already serves port 8765, usually the containers from `make up` (`make down`).
+- The page says the UI is not built: run `make ui-build` once (and after pulling UI changes).
 
 ### Web UI development (Vue + Vite, hot reload)
 
@@ -341,6 +357,9 @@ step, so roughly 35 minutes per picture; `qwen-turbo` takes about 67 s per step 
 
 - The server listens on `127.0.0.1:1234`; point Noah elsewhere with `NOAH_IMAGE_URL`. Any server with an OpenAI-style
   `POST /v1/images/generations` that returns `b64_json` works.
+- **With `make up`** Noah runs in a container, which cannot reach the host's `127.0.0.1`. Start the image server with
+  `NOAH_IMAGE_HOST=0.0.0.0 scripts/image_server.sh qwen-turbo`; compose already points Noah at
+  `http://host.docker.internal:1234`. That also opens port 1234 to your network, so keep it behind a firewall.
 - Files go to `~/.cache/noah/image` (`NOAH_IMAGE_DIR`). The script fetches sd.cpp's Linux Vulkan build (NVIDIA, AMD and
   Intel GPUs). On Windows or macOS, or for a CUDA build, set `SD_SERVER=/path/to/sd-server`. Extra flags go in `SD_ARGS`.
 - Pictures are about one megapixel: square 1024×1024, landscape 1344×768 or portrait 768×1344, picked from words such
