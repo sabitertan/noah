@@ -48,6 +48,8 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: r
 .topbar { display: flex; align-items: center; justify-content: center; padding: 10px; color: var(--muted); font-size: 12px; min-height: 40px; }
 .topbar .hamb { position: absolute; left: 10px; top: 8px; display: none; }
 body.collapsed .topbar .hamb { display: inline-flex; }
+.topbar .repo { position: absolute; right: 10px; top: 8px; color: var(--muted); }
+.topbar .repo:hover { color: var(--fg); }
 .view { flex: 1; overflow-y: auto; display: none; flex-direction: column; }
 .view.active { display: flex; }
 
