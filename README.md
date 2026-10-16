@@ -1,5 +1,9 @@
 # Noah
 
+[![Browser build](https://github.com/sabitertan/noah/actions/workflows/pages.yml/badge.svg?branch=main)](https://github.com/sabitertan/noah/actions/workflows/pages.yml)
+[![Desktop builds](https://github.com/sabitertan/noah/actions/workflows/desktop.yml/badge.svg)](https://github.com/sabitertan/noah/actions/workflows/desktop.yml)
+[![Try it in your browser](https://img.shields.io/badge/try_it-in_your_browser-blue)](https://sabitertan.github.io/noah/)
+
 Layered tiny-model orchestration. You pick a **decision engine** and an **orchestrator**; each job goes to a
 small **expert** (a tiny model, a tool, or both). Every decision is traced, so you can later fine-tune your own.
 Models can run locally (Ollama) or hosted by Hugging Face, OpenRouter or your own Azure Foundry resource, chosen per model. There is a web UI, a desktop app and a CLI.
