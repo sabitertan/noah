@@ -201,6 +201,18 @@ def main(argv: list[str]) -> None:
 
 def load(root: Path, name: str, cwd: Path | None = None) -> list[Problem]:
     """Run `_child` in a fresh interpreter. A hang, a crash or os._exit in the draft only takes that process down."""
+    if sys.platform == "emscripten":
+        # In the browser (noah/wasm.py) there are no processes: load in this one. Each load executes the tool files as new
+        # modules, so nothing of the draft stays behind; a draft that hangs hangs only this user's own tab.
+        real_stdout, sys.stdout = sys.stdout, sys.stderr
+        old = Path.cwd()
+        try:
+            if cwd:
+                os.chdir(cwd)
+            return _child(root, name)
+        finally:
+            sys.stdout = real_stdout
+            os.chdir(old)
     with tempfile.TemporaryDirectory(prefix="noah-check-") as tmp:
         dest = Path(tmp) / "result.json"
         args = [str(root), name, str(dest)]

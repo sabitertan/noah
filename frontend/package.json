@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:wasm": "vite --mode wasm",
     "build": "vite build",
+    "build:wasm": "vite build --mode wasm",
     "preview": "vite preview"
   },
   "dependencies": {

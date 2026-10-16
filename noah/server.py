@@ -112,6 +112,9 @@ if HAS_LAYA:
     # Zero-shot Laya puts most mass on "none", so a low threshold; bench: english 20/28 routed, 4/4 declined at 0.1.
     DEFAULT_PROFILES.append({"name": "Laya decision", "engine": "laya", "mode": "route", "extractor": "openai_compat",
                              "model": "qwen2.5:0.5b", "engine_model": "english", "threshold": 0.1})
+HAS_EMBEDDING = importlib.util.find_spec("fastembed") is not None  # not in the browser build (native ONNX runtime)
+if not HAS_EMBEDDING:
+    DEFAULT_PROFILES[0] = {**DEFAULT_PROFILES[0], "engine": "keyword", "threshold": 0.25}
 EXPERTS_DIR = Path(os.environ.get("NOAH_EXPERTS", "experts"))
 EXPERT_ERRORS: dict[str, str] = {}   # folder name -> why it did not load; shown on the Experts page so it can be fixed in the editor
 log = logging.getLogger("noah")
@@ -200,7 +203,7 @@ def config(request: Request):
         models = []
     return {
         "local": _is_local(request),
-        "engines": ["keyword", "embedding", "llm_tools", "llm_choice", *(["laya"] if HAS_LAYA else [])],
+        "engines": ["keyword", *(["embedding"] if HAS_EMBEDDING else []), "llm_tools", "llm_choice", *(["laya"] if HAS_LAYA else [])],
         "engine_models": {"laya": LAYA_CHECKPOINTS},  # engines whose models are not Ollama models
         "modes": ["route", "fanout"],
         "extractors": ["rule", "openai_compat"],

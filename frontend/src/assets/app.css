@@ -267,3 +267,26 @@ textarea { font: inherit; resize: vertical; }
   .xgrid { grid-template-columns: minmax(0, 1fr); }
   .xeditor { height: 55vh; }
 }
+
+/* browser-only build (src/wasm/): the start-up screen and the Ollama setup */
+#wasm-boot { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; }
+#wasm-boot h2 { color: var(--accent); margin: 0 0 4px; }
+#wasm-boot #wasm-boot-status { color: var(--muted); }
+#wasm-boot.failed #wasm-boot-status { color: var(--err); max-width: 560px; }
+.ollama h3 { margin: 0 0 6px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.ollama .tag.ok, .tag.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.ollama .tag.bad { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent); }
+.ollama .hfrow input { flex: 1 1 240px; }
+.ollama details { margin-top: 10px; }
+.ollama summary { cursor: pointer; color: var(--accent); }
+.ollama .steps { padding-left: 20px; margin: 8px 0 0; }
+.ollama .steps li { margin-bottom: 10px; }
+.ollama .tabs.small { margin: 6px 0; }
+.ollama .tabs.small .tab { padding: 4px 10px; font-size: 12px; }
+.ollama pre.cmd { background: var(--bg); border: 1px solid color-mix(in srgb, var(--border) 50%, transparent); border-radius: 8px; padding: 8px 10px; margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; cursor: copy; }
+.ollama code.cmd { cursor: copy; overflow-wrap: anywhere; }
+.ollama .pulls { border-collapse: collapse; margin-top: 6px; width: 100%; }
+.ollama .pulls td { padding: 3px 8px 3px 0; vertical-align: top; }
+.ollama .pulls td:first-child { width: 64px; }
+.wasm-note { margin: 18px auto 0; max-width: 560px; }
+.ollama a { color: var(--accent); }

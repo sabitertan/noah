@@ -123,6 +123,37 @@ npm run dist                       # installer in desktop/dist/ (AppImage on Lin
 
 With containers, `make dev` adds `compose.dev.yaml`: it mounts `noah/` and `experts/`, reloads the server on every Python/YAML change, and runs the Vite dev server for the UI (see "Web UI development" below).
 
+## In the browser (static site, no server)
+
+A second build target runs all of Noah inside the web page, so it can be published as a static site (GitHub Pages) and
+people use it without installing Noah. The Python is the same: [Pyodide](https://pyodide.org) (CPython compiled to
+WebAssembly) runs the FastAPI app in a Web Worker, and the page's `/api/...` requests go to it instead of the network
+(`frontend/src/wasm/`, `noah/wasm.py`). Each visitor's experts, versions and settings stay in their own browser (IndexedDB).
+
+```bash
+cd frontend
+npm run dev:wasm      # http://localhost:5174, reload the page after changing Python
+npm run build:wasm    # the static site in site/ (with noah-py.zip: noah/ and experts/)
+```
+
+`.github/workflows/pages.yml` publishes `site/` on every push to `main` (enable once: Settings > Pages > Source: GitHub
+Actions). The first visit downloads about 15 MB (Python and its packages, from the jsDelivr CDN), then it is cached; Python
+starts in about 5 s.
+
+**Models still run in Ollama on the visitor's computer.** The page says so and walks them through it (Models page): install
+Ollama, let the page use it, pull the models, press Connect. The address is a setting (default `http://localhost:11434`).
+
+- Ollama only answers web pages it trusts, so the visitor sets `OLLAMA_ORIGINS` to the site's address (for example
+  `https://<user>.github.io`) and restarts Ollama. Pages on localhost need nothing.
+- The browser may ask whether the site may use apps and services on the device; they choose Allow.
+- Hosted models (Hugging Face, OpenRouter, Azure) are called straight from the browser with the visitor's own key, so they
+  work as far as each provider allows calls from web pages (CORS).
+
+What is different from the server: the embedding decision engine needs the ONNX runtime, which has no WebAssembly build
+here, so the Default orchestrator routes by keywords. The `files` and `image` experts need programs on the computer (a files
+folder, an image server) and start switched off. The expert check loads a draft in the page itself (there are no processes),
+and Python can be edited freely: it only ever runs in the visitor's own tab.
+
 ## Without containers
 
 ```bash

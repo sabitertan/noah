@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick } from 'vue';
 import UiIcon from './UiIcon.vue';
 import FileCard from './FileCard.vue';
 import { fmt } from '../lib/format.js';
-import { cfg, view, currentChat, messages, current, enabledProfiles, activeProfile, busy, setMode, sendMessage } from '../store.js';
+import { cfg, view, IS_WASM, openModelsTab, currentChat, messages, current, enabledProfiles, activeProfile, busy, setMode, sendMessage } from '../store.js';
 
 const text = ref(''), log = ref(null), box = ref(null);
 const exampleChips = computed(() => cfg.value.experts.filter(e => e.enabled).flatMap(e => e.examples.slice(0, 1)));
@@ -33,6 +33,8 @@ defineExpose({ focus: () => box.value?.focus() });
       <div v-if="!messages.length" class="empty">
         <h1><UiIcon name="cpu" :size="26" /> Noah</h1><p>Tiny experts, one job each.</p>
         <div class="chips"><button v-for="t in exampleChips" :key="t" class="chip" @click="ask(t)">{{ t }}</button></div>
+        <div v-if="IS_WASM && !cfg.models.length" class="hfbox wasm-note" id="wasm-ollama-note">Noah is running in your browser. Local models (Qwen, Tev, …) need
+          <b>Ollama</b> installed on your computer: <button class="btn small" @click="openModelsTab('local')">Set up Ollama</button></div>
       </div>
       <div v-for="(m, i) in messages" :key="i" class="msg">
         <div class="u"><span>{{ m.text }}</span></div>

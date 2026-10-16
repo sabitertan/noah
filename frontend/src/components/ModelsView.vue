@@ -4,9 +4,10 @@ import { computed, reactive, watch } from 'vue';
 import HostedPanel from './HostedPanel.vue';
 import AzurePanel from './AzurePanel.vue';
 import GgufDownloads from './GgufDownloads.vue';
+import OllamaSetup from './OllamaSetup.vue';
 import { norm, hostedKind, PROVIDERS } from '../lib/format.js';
 import { tests, testModel as test, removeModel as remove } from '../lib/hostedActions.js';
-import { cfg, hostedModels, profiles, isOn, modelsTab, openModelsTab } from '../store.js';
+import { cfg, hostedModels, profiles, isOn, modelsTab, openModelsTab, IS_WASM } from '../store.js';
 
 const rows = () => [...cfg.value.models.map(id => ({ id, kind: '' })), ...hostedModels.value.map(id => ({ id, kind: hostedKind(id) }))];
 const where = kind => kind ? `${PROVIDERS[kind].label} · hosted` : 'Local · Ollama';
@@ -39,6 +40,7 @@ const tabs = computed(() => [
     </div>
 
     <div v-show="modelsTab === 'local'" id="tab-local">
+      <OllamaSetup v-if="IS_WASM" />
       <table v-if="rows().length" id="modelsTable">
         <thead><tr><th>Model</th><th>Served from</th><th>Used by orchestrators</th><th>Used by experts</th></tr></thead>
         <tbody><tr v-for="m in rows()" :key="m.id" :data-model="m.id">
