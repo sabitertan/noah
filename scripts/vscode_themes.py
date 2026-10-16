@@ -20,6 +20,7 @@ VSCODE_RAW = "https://raw.githubusercontent.com/microsoft/vscode/main/extensions
 GALLERY = "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/{}/vsextensions/{}/latest/vspackage"
 
 # (id, name, source, theme label in the extension). source "vscode" = a built-in theme file name.
+# The Themes page shows each one as a card like vscodethemes.com, with its publisher from AUTHORS.
 THEMES = [
     ("dark-modern", "Dark Modern", "vscode", "dark_modern.json"),
     ("vs-dark", "Visual Studio Dark", "ms-vscode.cpptools-themes", "Dark (Visual Studio - C/C++)"),
@@ -41,6 +42,21 @@ THEMES = [
     ("night-owl-light", "Night Owl Light", "sdras.night-owl", "Night Owl Light"),
 ]
 
+AUTHORS = {
+    'vscode': 'Microsoft',
+    'ms-vscode.cpptools-themes': 'Microsoft',
+    'ms-vscode.PowerShell': 'Microsoft',
+    'GitHub.github-vscode-theme': 'GitHub',
+    'zhuangtongfa.Material-theme': 'binaryify',
+    'dracula-theme.theme-dracula': 'Dracula Theme',
+    'akamud.vscode-theme-onedark': 'Mahmoud Ali',
+    'Equinusocio.vsc-material-theme': 'Material Theme',
+    'teabyii.ayu': 'teabyii',
+    'monokai.theme-monokai-pro-vscode': 'monokai',
+    'johnpapa.winteriscoming': 'John Papa',
+    'sdras.night-owl': 'sarah.drasner',
+}
+
 # app variable -> VS Code color keys, tried in order; the first one that is readable where the app uses it wins
 UI = {
     "bg": ["editor.background"],
@@ -56,6 +72,22 @@ UI = {
     "warn": ["editorWarning.foreground", "list.warningForeground", "terminal.ansiYellow", "gitDecoration.modifiedResourceForeground"],
     "err": ["errorForeground", "editorError.foreground", "list.errorForeground", "terminal.ansiRed"],
     "bar": ["scrollbarSlider.background", "input.background"],
+}
+# the window around the editor on a theme card: card key -> (VS Code keys, VS Code's own default when dark / light)
+CHROME = {
+    "title-bg": (["titleBar.activeBackground"], "#3c3c3c", "#dddddd"),
+    "title-fg": (["titleBar.activeForeground"], "#cccccc", "#333333"),
+    "act-bg": (["activityBar.background"], "#333333", "#2c2c2c"),
+    "act-fg": (["activityBar.foreground"], "#ffffff", "#ffffff"),
+    "act-dim": (["activityBar.inactiveForeground"], None, None),
+    "act-border": (["activityBar.activeBorder"], None, None),
+    "badge": (["activityBarBadge.background"], "#007acc", "#007acc"),
+    "tabs-bg": (["editorGroupHeader.tabsBackground"], "#252526", "#f3f3f3"),
+    "tab-bg": (["tab.activeBackground", "editor.background"], "#1e1e1e", "#ffffff"),
+    "tab-fg": (["tab.activeForeground"], "#ffffff", "#333333"),
+    "tab-top": (["tab.activeBorderTop", "tab.activeBorder"], None, None),
+    "status-bg": (["statusBar.background"], "#007acc", "#007acc"),
+    "status-fg": (["statusBar.foreground"], "#ffffff", "#ffffff"),
 }
 HUES = {"ok": (75, 175), "warn": (20, 65), "err": (330, 20)}  # status colors must still read as green / amber / red
 EDITOR_KEYS = ["editor.background", "editor.foreground", "editor.lineHighlightBackground", "editor.selectionBackground",
@@ -199,6 +231,24 @@ def palette(colors: dict, dark: bool) -> dict:
     return {k: hexs(v) for k, v in out.items()}
 
 
+def chrome(colors: dict, dark: bool, bg) -> dict:
+    out = {}
+    for key, (keys, dark_default, light_default) in CHROME.items():
+        c = next((rgba(colors[k]) for k in keys if rgba(colors.get(k)) and rgba(colors[k])[3] > 0.05), None)
+        c = c or rgba(dark_default if dark else light_default) if (c or (dark_default if dark else light_default)) else None
+        out[key] = c
+    act_bg = out["act-bg"] = over(out["act-bg"], bg)
+    out["act-fg"] = over(out["act-fg"], act_bg)
+    out["act-dim"] = over(out["act-dim"], act_bg) if out["act-dim"] else mix(out["act-fg"], act_bg, 0.4)
+    out["act-border"] = over(out["act-border"], act_bg) if out["act-border"] else out["act-fg"]
+    for k in ("title-bg", "tabs-bg", "tab-bg", "status-bg", "badge"):
+        out[k] = over(out[k], bg)
+    for k, under in (("title-fg", "title-bg"), ("tab-fg", "tab-bg"), ("status-fg", "status-bg")):
+        out[k] = over(out[k], out[under])
+    out["tab-top"] = over(out["tab-top"], out["tab-bg"]) if out["tab-top"] else out["tab-bg"]
+    return {k: hexs(v) for k, v in out.items()}
+
+
 def token_rules(token_colors: list) -> list:
     best: dict[str, tuple[int, str]] = {}
     for tc in token_colors or []:
@@ -225,8 +275,9 @@ def main():
             t, ui = load_extension(source, label, cache)
         colors = {k: v for k, v in (t.get("colors") or {}).items() if isinstance(v, str)}
         dark = ui != "vs" and ui != "hc-light"
-        out.append({"id": tid, "name": name, "dark": dark, "source": source if source != "vscode" else "VS Code",
-                    "vars": palette(colors, dark),
+        vars_ = palette(colors, dark)
+        out.append({"id": tid, "name": name, "dark": dark, "source": source if source != "vscode" else "VS Code", "author": AUTHORS[source],
+                    "vars": vars_, "chrome": chrome(colors, dark, rgba(vars_["bg"])),
                     "editor": {k: colors[k] for k in EDITOR_KEYS if rgba(colors.get(k))},
                     "rules": token_rules(t.get("tokenColors"))})
         print(f"{name:24} {'dark ' if dark else 'light'} {out[-1]['vars']}")

@@ -1,10 +1,7 @@
 <script setup>
 import UiIcon from './UiIcon.vue';
 import { countLabel } from '../lib/format.js';
-import { THEMES } from '../lib/themes.js';
-import { cfg, chats, currentChat, view, groups, theme, themeInfo, collapsed, profiles, enabledProfiles, enabledExpertCount, go, openChat, newChat, deleteChat } from '../store.js';
-
-const themeGroups = [{ label: 'Dark', themes: THEMES.filter(t => t.dark) }, { label: 'Light', themes: THEMES.filter(t => !t.dark) }];
+import { cfg, chats, currentChat, view, groups, themeInfo, collapsed, profiles, enabledProfiles, enabledExpertCount, go, openChat, newChat, deleteChat } from '../store.js';
 </script>
 
 <template>
@@ -33,15 +30,7 @@ const themeGroups = [{ label: 'Dark', themes: THEMES.filter(t => t.dark) }, { la
         <div class="item" :class="{ active: view === 'traces' }" data-view="traces" @click="go('traces')"><UiIcon name="list" /><span class="grow">Traces</span></div>
       </div>
 
-      <div class="item" id="themeBtn" :class="{ open: groups.theme }" @click="groups.theme = !groups.theme"><UiIcon name="moon" /><span class="grow">Theme</span><span class="meta">{{ themeInfo.name }}</span><UiIcon name="chev" :size="12" class="chev" /></div>
-      <div class="group-body" :class="{ closed: !groups.theme }">
-        <template v-for="g in themeGroups" :key="g.label">
-          <div class="theme-label">{{ g.label }}</div>
-          <div v-for="t in g.themes" :key="t.id" class="item" :class="{ active: theme === t.id }" :data-theme="t.id" :title="t.source" @click="theme = t.id">
-            <span class="swatch" :style="{ background: `linear-gradient(135deg, ${t.vars.panel} 50%, ${t.vars.accent} 50%)`, borderColor: t.vars.border }"></span><span class="grow">{{ t.name }}</span>
-          </div>
-        </template>
-      </div>
+      <div class="item" id="themeBtn" :class="{ active: view === 'themes' }" data-view="themes" @click="go('themes')"><UiIcon name="moon" /><span class="grow">Themes</span><span class="meta">{{ themeInfo.name }}</span></div>
     </div>
   </nav>
 </template>

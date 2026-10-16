@@ -4,6 +4,7 @@
   "name": "Dark Modern",
   "dark": true,
   "source": "VS Code",
+  "author": "Microsoft",
   "vars": {
    "bg": "#1f1f1f",
    "fg": "#cccccc",
@@ -17,6 +18,21 @@
    "warn": "#cca700",
    "err": "#f85149",
    "bar": "#313131"
+  },
+  "chrome": {
+   "title-bg": "#181818",
+   "title-fg": "#cccccc",
+   "act-bg": "#181818",
+   "act-fg": "#d7d7d7",
+   "act-dim": "#868686",
+   "act-border": "#0078d4",
+   "badge": "#0078d4",
+   "tabs-bg": "#181818",
+   "tab-bg": "#1f1f1f",
+   "tab-fg": "#ffffff",
+   "tab-top": "#0078d4",
+   "status-bg": "#181818",
+   "status-fg": "#cccccc"
   },
   "editor": {
    "editor.background": "#1F1F1F",
@@ -65,6 +81,7 @@
   "name": "Visual Studio Dark",
   "dark": true,
   "source": "ms-vscode.cpptools-themes",
+  "author": "Microsoft",
   "vars": {
    "bg": "#1e1e1e",
    "fg": "#dadada",
@@ -78,6 +95,21 @@
    "warn": "#cca700",
    "err": "#f85149",
    "bar": "#3a3a3a"
+  },
+  "chrome": {
+   "title-bg": "#3c3c3c",
+   "title-fg": "#cccccc",
+   "act-bg": "#333333",
+   "act-fg": "#ffffff",
+   "act-dim": "#858585",
+   "act-border": "#ffffff",
+   "badge": "#007acc",
+   "tabs-bg": "#252526",
+   "tab-bg": "#1e1e1e",
+   "tab-fg": "#ffffff",
+   "tab-top": "#1e1e1e",
+   "status-bg": "#007acc",
+   "status-fg": "#ffffff"
   },
   "editor": {
    "editor.background": "#1E1E1E",
@@ -125,6 +157,7 @@
   "name": "GitHub Dark",
   "dark": true,
   "source": "GitHub.github-vscode-theme",
+  "author": "GitHub",
   "vars": {
    "bg": "#0d1117",
    "fg": "#e6edf3",
@@ -138,6 +171,21 @@
    "warn": "#d29922",
    "err": "#f85149",
    "bar": "#1d2127"
+  },
+  "chrome": {
+   "title-bg": "#0d1117",
+   "title-fg": "#7d8590",
+   "act-bg": "#0d1117",
+   "act-fg": "#e6edf3",
+   "act-dim": "#7d8590",
+   "act-border": "#f78166",
+   "badge": "#1f6feb",
+   "tabs-bg": "#010409",
+   "tab-bg": "#0d1117",
+   "tab-fg": "#e6edf3",
+   "tab-top": "#f78166",
+   "status-bg": "#0d1117",
+   "status-fg": "#7d8590"
   },
   "editor": {
    "editor.background": "#0d1117",
@@ -188,6 +236,7 @@
   "name": "One Dark Pro",
   "dark": true,
   "source": "zhuangtongfa.Material-theme",
+  "author": "binaryify",
   "vars": {
    "bg": "#282c34",
    "fg": "#abb2bf",
@@ -201,6 +250,21 @@
    "warn": "#d19a66",
    "err": "#e05561",
    "bar": "#323741"
+  },
+  "chrome": {
+   "title-bg": "#282c34",
+   "title-fg": "#9da5b4",
+   "act-bg": "#282c34",
+   "act-fg": "#d7dae0",
+   "act-dim": "#6e7279",
+   "act-border": "#d7dae0",
+   "badge": "#4d78cc",
+   "tabs-bg": "#21252b",
+   "tab-bg": "#282c34",
+   "tab-fg": "#dcdcdc",
+   "tab-top": "#b4b4b4",
+   "status-bg": "#21252b",
+   "status-fg": "#9da5b4"
   },
   "editor": {
    "editor.background": "#282c34",
@@ -253,6 +317,7 @@
   "name": "Dracula",
   "dark": true,
   "source": "dracula-theme.theme-dracula",
+  "author": "Dracula Theme",
   "vars": {
    "bg": "#282a36",
    "fg": "#f8f8f2",
@@ -266,6 +331,21 @@
    "warn": "#ffb86c",
    "err": "#ff5555",
    "bar": "#41424a"
+  },
+  "chrome": {
+   "title-bg": "#21222c",
+   "title-fg": "#f8f8f2",
+   "act-bg": "#343746",
+   "act-fg": "#f8f8f2",
+   "act-dim": "#6272a4",
+   "act-border": "#9a5886",
+   "badge": "#ff79c6",
+   "tabs-bg": "#191a21",
+   "tab-bg": "#282a36",
+   "tab-fg": "#f8f8f2",
+   "tab-top": "#94527e",
+   "status-bg": "#191a21",
+   "status-fg": "#f8f8f2"
   },
   "editor": {
    "editor.background": "#282A36",
@@ -310,6 +390,7 @@
   "name": "Atom One Dark",
   "dark": true,
   "source": "akamud.vscode-theme-onedark",
+  "author": "Mahmoud Ali",
   "vars": {
    "bg": "#282c34",
    "fg": "#abb2bf",
@@ -323,6 +404,21 @@
    "warn": "#cca700",
    "err": "#f85149",
    "bar": "#383e49"
+  },
+  "chrome": {
+   "title-bg": "#21252b",
+   "title-fg": "#9da5b4",
+   "act-bg": "#333842",
+   "act-fg": "#d7dae0",
+   "act-dim": "#757981",
+   "act-border": "#d7dae0",
+   "badge": "#528bff",
+   "tabs-bg": "#21252b",
+   "tab-bg": "#282c34",
+   "tab-fg": "#d7dae0",
+   "tab-top": "#282c34",
+   "status-bg": "#21252b",
+   "status-fg": "#9da5b4"
   },
   "editor": {
    "editor.background": "#282C34",
@@ -374,6 +470,7 @@
   "name": "Material Theme",
   "dark": true,
   "source": "Equinusocio.vsc-material-theme",
+  "author": "Material Theme",
   "vars": {
    "bg": "#263238",
    "fg": "#eeffff",
@@ -387,6 +484,21 @@
    "warn": "#ffcb6b",
    "err": "#f07178",
    "bar": "#3f4c51"
+  },
+  "chrome": {
+   "title-bg": "#263238",
+   "title-fg": "#eeffff",
+   "act-bg": "#263238",
+   "act-fg": "#eeffff",
+   "act-dim": "#768488",
+   "act-border": "#80cbc4",
+   "badge": "#80cbc4",
+   "tabs-bg": "#263238",
+   "tab-bg": "#263238",
+   "tab-fg": "#ffffff",
+   "tab-top": "#80cbc4",
+   "status-bg": "#263238",
+   "status-fg": "#546e7a"
   },
   "editor": {
    "editor.background": "#263238",
@@ -438,6 +550,7 @@
   "name": "Ayu Dark",
   "dark": true,
   "source": "teabyii.ayu",
+  "author": "teabyii",
   "vars": {
    "bg": "#10141c",
    "fg": "#bfbdb6",
@@ -451,6 +564,21 @@
    "warn": "#e6b450",
    "err": "#d95757",
    "bar": "#2c313e"
+  },
+  "chrome": {
+   "title-bg": "#010102",
+   "title-fg": "#5a6378",
+   "act-bg": "#0d1017",
+   "act-fg": "#4b5265",
+   "act-dim": "#3b4251",
+   "act-border": "#e6b450",
+   "badge": "#e6b450",
+   "tabs-bg": "#0b0e14",
+   "tab-bg": "#10141c",
+   "tab-fg": "#bfbdb6",
+   "tab-top": "#e6b450",
+   "status-bg": "#010102",
+   "status-fg": "#5a6378"
   },
   "editor": {
    "editor.background": "#10141c",
@@ -503,6 +631,7 @@
   "name": "Monokai Pro",
   "dark": true,
   "source": "monokai.theme-monokai-pro-vscode",
+  "author": "monokai",
   "vars": {
    "bg": "#2d2a2e",
    "fg": "#fcfcfa",
@@ -516,6 +645,21 @@
    "warn": "#ffd866",
    "err": "#ff6188",
    "bar": "#3a373a"
+  },
+  "chrome": {
+   "title-bg": "#221f22",
+   "title-fg": "#939293",
+   "act-bg": "#19181a",
+   "act-fg": "#c1c0c0",
+   "act-dim": "#5b595c",
+   "act-border": "#c1c0c0",
+   "badge": "#ffd866",
+   "tabs-bg": "#2d2a2e",
+   "tab-bg": "#2d2a2e",
+   "tab-fg": "#ffd866",
+   "tab-top": "#ffd866",
+   "status-bg": "#221f22",
+   "status-fg": "#727072"
   },
   "editor": {
    "editor.background": "#2d2a2e",
@@ -568,6 +712,7 @@
   "name": "Light Modern",
   "dark": false,
   "source": "VS Code",
+  "author": "Microsoft",
   "vars": {
    "bg": "#ffffff",
    "fg": "#3b3b3b",
@@ -581,6 +726,21 @@
    "warn": "#bf8803",
    "err": "#f85149",
    "bar": "#dcdcdc"
+  },
+  "chrome": {
+   "title-bg": "#f8f8f8",
+   "title-fg": "#1e1e1e",
+   "act-bg": "#f8f8f8",
+   "act-fg": "#1f1f1f",
+   "act-dim": "#616161",
+   "act-border": "#005fb8",
+   "badge": "#005fb8",
+   "tabs-bg": "#f8f8f8",
+   "tab-bg": "#ffffff",
+   "tab-fg": "#3b3b3b",
+   "tab-top": "#005fb8",
+   "status-bg": "#f8f8f8",
+   "status-fg": "#3b3b3b"
   },
   "editor": {
    "editor.background": "#FFFFFF",
@@ -629,6 +789,7 @@
   "name": "Visual Studio Light",
   "dark": false,
   "source": "ms-vscode.cpptools-themes",
+  "author": "Microsoft",
   "vars": {
    "bg": "#ffffff",
    "fg": "#000000",
@@ -642,6 +803,21 @@
    "warn": "#bf8803",
    "err": "#e51400",
    "bar": "#d9d9d9"
+  },
+  "chrome": {
+   "title-bg": "#dddddd",
+   "title-fg": "#333333",
+   "act-bg": "#2c2c2c",
+   "act-fg": "#ffffff",
+   "act-dim": "#808080",
+   "act-border": "#ffffff",
+   "badge": "#007acc",
+   "tabs-bg": "#f3f3f3",
+   "tab-bg": "#ffffff",
+   "tab-fg": "#333333",
+   "tab-top": "#ffffff",
+   "status-bg": "#007acc",
+   "status-fg": "#ffffff"
   },
   "editor": {
    "editor.background": "#FFFFFF",
@@ -689,6 +865,7 @@
   "name": "PowerShell ISE",
   "dark": false,
   "source": "ms-vscode.PowerShell",
+  "author": "Microsoft",
   "vars": {
    "bg": "#ffffff",
    "fg": "#3b3b3b",
@@ -702,6 +879,21 @@
    "warn": "#bf8803",
    "err": "#e51400",
    "bar": "#c8d1dc"
+  },
+  "chrome": {
+   "title-bg": "#dddddd",
+   "title-fg": "#333333",
+   "act-bg": "#e1ecf9",
+   "act-fg": "#a9a9a9",
+   "act-dim": "#cbd1d9",
+   "act-border": "#a9a9a9",
+   "badge": "#a9a9a9",
+   "tabs-bg": "#f3f3f3",
+   "tab-bg": "#ffffff",
+   "tab-fg": "#333333",
+   "tab-top": "#ffffff",
+   "status-bg": "#999999",
+   "status-fg": "#ffffff"
   },
   "editor": {
    "editor.lineHighlightBackground": "#add8e6",
@@ -743,6 +935,7 @@
   "name": "GitHub Light",
   "dark": false,
   "source": "GitHub.github-vscode-theme",
+  "author": "GitHub",
   "vars": {
    "bg": "#ffffff",
    "fg": "#1f2328",
@@ -756,6 +949,21 @@
    "warn": "#4d2d00",
    "err": "#cf222e",
    "bar": "#e1e4e8"
+  },
+  "chrome": {
+   "title-bg": "#ffffff",
+   "title-fg": "#656d76",
+   "act-bg": "#ffffff",
+   "act-fg": "#1f2328",
+   "act-dim": "#656d76",
+   "act-border": "#fd8c73",
+   "badge": "#0969da",
+   "tabs-bg": "#f6f8fa",
+   "tab-bg": "#ffffff",
+   "tab-fg": "#1f2328",
+   "tab-top": "#fd8c73",
+   "status-bg": "#ffffff",
+   "status-fg": "#656d76"
   },
   "editor": {
    "editor.background": "#ffffff",
@@ -806,6 +1014,7 @@
   "name": "Material Lighter",
   "dark": false,
   "source": "Equinusocio.vsc-material-theme",
+  "author": "Material Theme",
   "vars": {
    "bg": "#fafafa",
    "fg": "#3b3b3b",
@@ -819,6 +1028,21 @@
    "warn": "#bf8803",
    "err": "#e53935",
    "bar": "#dddddd"
+  },
+  "chrome": {
+   "title-bg": "#fafafa",
+   "title-fg": "#90a4ae",
+   "act-bg": "#fafafa",
+   "act-fg": "#90a4ae",
+   "act-dim": "#d0d8dc",
+   "act-border": "#80cbc4",
+   "badge": "#80cbc4",
+   "tabs-bg": "#fafafa",
+   "tab-bg": "#fafafa",
+   "tab-fg": "#000000",
+   "tab-top": "#80cbc4",
+   "status-bg": "#fafafa",
+   "status-fg": "#7e939e"
   },
   "editor": {
    "editor.background": "#FAFAFA",
@@ -870,6 +1094,7 @@
   "name": "Ayu Light",
   "dark": false,
   "source": "teabyii.ayu",
+  "author": "teabyii",
   "vars": {
    "bg": "#fcfcfc",
    "fg": "#5c6166",
@@ -883,6 +1108,21 @@
    "warn": "#bf8803",
    "err": "#e65050",
    "bar": "#c9ced6"
+  },
+  "chrome": {
+   "title-bg": "#ebeef0",
+   "title-fg": "#828e9f",
+   "act-bg": "#f8f9fa",
+   "act-fg": "#9aa3b1",
+   "act-dim": "#b1b9c3",
+   "act-border": "#f29718",
+   "badge": "#f29718",
+   "tabs-bg": "#f4f6f7",
+   "tab-bg": "#fcfcfc",
+   "tab-fg": "#5c6166",
+   "tab-top": "#f29718",
+   "status-bg": "#ebeef0",
+   "status-fg": "#828e9f"
   },
   "editor": {
    "editor.background": "#fcfcfc",
@@ -935,6 +1175,7 @@
   "name": "Monokai Pro Light",
   "dark": false,
   "source": "monokai.theme-monokai-pro-vscode",
+  "author": "monokai",
   "vars": {
    "bg": "#faf4f2",
    "fg": "#29242a",
@@ -948,6 +1189,21 @@
    "warn": "#cc7a0a",
    "err": "#e14775",
    "bar": "#dad5d3"
+  },
+  "chrome": {
+   "title-bg": "#ede7e5",
+   "title-fg": "#918c8e",
+   "act-bg": "#e0dad9",
+   "act-fg": "#706b6e",
+   "act-dim": "#a59fa0",
+   "act-border": "#706b6e",
+   "badge": "#e14775",
+   "tabs-bg": "#faf4f2",
+   "tab-bg": "#faf4f2",
+   "tab-fg": "#e14775",
+   "tab-top": "#e14775",
+   "status-bg": "#ede7e5",
+   "status-fg": "#918c8e"
   },
   "editor": {
    "editor.background": "#faf4f2",
@@ -1000,6 +1256,7 @@
   "name": "Winter is Coming Light",
   "dark": false,
   "source": "johnpapa.winteriscoming",
+  "author": "John Papa",
   "vars": {
    "bg": "#ffffff",
    "fg": "#236ebf",
@@ -1013,6 +1270,21 @@
    "warn": "#bf8803",
    "err": "#ef5350",
    "bar": "#7da0ba"
+  },
+  "chrome": {
+   "title-bg": "#112233",
+   "title-fg": "#eeefff",
+   "act-bg": "#2c2c2c",
+   "act-fg": "#99d0f7",
+   "act-dim": "#586e7d",
+   "act-border": "#99d0f7",
+   "badge": "#219fd5",
+   "tabs-bg": "#ffffff",
+   "tab-bg": "#ffffff",
+   "tab-fg": "#333333",
+   "tab-top": "#ffffff",
+   "status-bg": "#2f86d2",
+   "status-fg": "#ffffff"
   },
   "editor": {
    "editor.background": "#FFFFFF",
@@ -1064,6 +1336,7 @@
   "name": "Night Owl Light",
   "dark": false,
   "source": "sdras.night-owl",
+  "author": "sarah.drasner",
   "vars": {
    "bg": "#fbfbfb",
    "fg": "#403f53",
@@ -1077,6 +1350,21 @@
    "warn": "#bf8803",
    "err": "#e64d49",
    "bar": "#d6d5d8"
+  },
+  "chrome": {
+   "title-bg": "#f0f0f0",
+   "title-fg": "#333333",
+   "act-bg": "#f0f0f0",
+   "act-fg": "#403f53",
+   "act-dim": "#aaa9b1",
+   "act-border": "#403f53",
+   "badge": "#403f53",
+   "tabs-bg": "#f0f0f0",
+   "tab-bg": "#f6f6f6",
+   "tab-fg": "#403f53",
+   "tab-top": "#f6f6f6",
+   "status-bg": "#f0f0f0",
+   "status-fg": "#403f53"
   },
   "editor": {
    "editor.background": "#FBFBFB",

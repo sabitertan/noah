@@ -43,7 +43,7 @@ defineExpose({ focus: () => box.value?.focus() });
         <template v-else>
           <div v-for="(r, j) in m.results" :key="j" class="a" :class="{ err: r.error }">
             <div class="head"><span class="badge">{{ r.expert }}</span><span>{{ r.extractor }} · {{ r.latency_ms.toFixed(0) }} ms</span></div>
-            <div class="body" v-html="fmt(r.output)"></div>
+            <div class="body" v-code v-html="fmt(r.output)"></div>
             <div v-if="r.attachments && r.attachments.length" class="files"><FileCard v-for="f in r.attachments" :key="f.path" :file="f" :local="cfg.local" /></div>
             <details><summary>arguments</summary><code>{{ JSON.stringify(r.args) }}</code><template v-if="r.error"><br><code>{{ r.error }}</code></template></details>
           </div>

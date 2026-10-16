@@ -36,8 +36,6 @@ body.collapsed .sidebar { margin-left: -250px; }
 .dot.on { background: var(--ok); }
 .group-body { margin-left: 6px; border-left: 1px solid color-mix(in srgb, var(--border) 40%, transparent); padding-left: 4px; }
 .group-body.closed { display: none; }
-.theme-label { color: var(--muted); font-size: 11px; padding: 6px 10px 2px; text-transform: uppercase; letter-spacing: .06em; }
-.swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid; flex: none; }
 .chev { transition: transform .15s; margin-left: auto; color: var(--muted) !important; }
 .open > .chev { transform: rotate(90deg); }
 .chat-item .del { opacity: 0; color: var(--muted); }
@@ -72,6 +70,13 @@ body.collapsed .topbar .hamb { display: inline-flex; }
 .a .body pre { white-space: pre; background: var(--panel); border: 1px solid color-mix(in srgb, var(--border) 60%, transparent); border-radius: 10px; padding: 10px 12px; margin: 8px 0; overflow-x: auto; position: relative; }
 .a .body pre code { background: none; padding: 0; }
 .a .body pre .lang { position: absolute; right: 10px; top: 4px; font-size: 10px; color: var(--muted); }
+/* code blocks upgraded to read-only Monaco editors (lib/codeblocks.js); the editor itself wears the theme's editor colors */
+.codeblock { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 8px 0; white-space: normal; }
+.cb-head { display: flex; align-items: center; justify-content: space-between; padding: 3px 6px 3px 12px; background: var(--panel);
+  border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+.cb-copy { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; color: var(--muted); padding: 3px 6px; border-radius: 6px; font-size: 11px; }
+.cb-copy:hover { background: var(--raised); color: var(--fg); }
+.cb-ed { min-height: 20px; }
 .a.err .body { color: var(--err); }
 details { margin-top: 6px; font-size: 12px; color: var(--muted); }
 summary { cursor: pointer; }
@@ -290,3 +295,28 @@ textarea { font: inherit; resize: vertical; }
 .ollama .pulls td:first-child { width: 64px; }
 .wasm-note { margin: 18px auto 0; max-width: 560px; }
 .ollama a { color: var(--accent); }
+
+/* Themes page: each card is a small VS Code window in that theme's own colors (ThemesView, vars from lib/themes.json) */
+.theme-group { margin: 22px 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 400; }
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 22px 18px; }
+.theme-card { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 8px; border-radius: 10px; }
+.theme-card:focus-visible .tc-win { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tc-win { border-radius: 8px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); background: var(--ed-bg);
+  font: 10.5px/1.6 'Fira Code', ui-monospace, monospace; transition: transform .12s, box-shadow .12s; display: flex; flex-direction: column; }
+.theme-card:hover .tc-win { transform: translateY(-2px); box-shadow: 0 6px 18px rgb(0 0 0 / .25); }
+.theme-card.active .tc-win { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tc-title { background: var(--title-bg); color: var(--title-fg); text-align: center; font-size: 10px; padding: 3px 0; }
+.tc-main { display: flex; flex: 1; }
+.tc-act { background: var(--act-bg); color: var(--act-dim); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 7px; position: relative; }
+.tc-act svg.on { color: var(--act-fg); }
+.tc-act::before { content: ''; position: absolute; left: 0; top: 6px; height: 18px; width: 2px; background: var(--act-border); }
+.tc-badge { position: absolute; left: 17px; top: 63px; width: 6px; height: 6px; border-radius: 50%; background: var(--badge); }
+.tc-ed { flex: 1; min-width: 0; }
+.tc-tabs { background: var(--tabs-bg); display: flex; }
+.tc-tab { background: var(--tab-bg); color: var(--tab-fg); padding: 4px 22px; border-top: 1px solid var(--tab-top); font-size: 10px; }
+.tc-code { margin: 0; padding: 6px 8px 8px 0; color: var(--ed-fg); white-space: pre; overflow: hidden; font: inherit; }
+.tc-ln { display: inline-block; width: 26px; padding-right: 10px; text-align: right; color: var(--ed-ln); }
+.tc-status { background: var(--status-bg); color: var(--status-fg); display: flex; justify-content: space-between; padding: 1px 8px; font-size: 9.5px; }
+.tc-meta { display: flex; justify-content: space-between; align-items: center; padding: 0 2px; }
+.tc-name { color: var(--fg); }
+.tc-by { color: var(--muted); font-size: 11px; }

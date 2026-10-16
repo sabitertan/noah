@@ -5,6 +5,7 @@ import OrchestratorsView from './components/OrchestratorsView.vue';
 import ExpertsView from './components/ExpertsView.vue';
 import ModelsView from './components/ModelsView.vue';
 import TracesView from './components/TracesView.vue';
+import ThemesView from './components/ThemesView.vue';
 import { view, title, ready, collapsed } from './store.js';
 </script>
 
@@ -19,6 +20,7 @@ import { view, title, ready, collapsed } from './store.js';
       <ExpertsView v-if="view === 'experts'" />
       <ModelsView v-if="view === 'models'" />
       <TracesView v-if="view === 'traces'" />
+      <ThemesView v-if="view === 'themes'" />
     </template>
   </main>
 </template>

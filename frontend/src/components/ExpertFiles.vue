@@ -211,7 +211,6 @@ watch(compareFile, () => showDiff());
 
 /* ---------- lifecycle ---------- */
 const theme = () => editorTheme(themeInfo.value);
-watch(themeInfo, () => monaco.editor.setTheme(theme()));
 const guard = e => { if (dirty.value) { e.preventDefault(); e.returnValue = ''; } };
 onMounted(async () => {
   editor = monaco.editor.create(host.value, { automaticLayout: true, theme: theme(), fontFamily: "'Fira Code', ui-monospace, monospace", fontSize: 13,

@@ -157,7 +157,7 @@ const addShot = () => form.shots.push({ user: '', assistant: '' });
         <div class="hfrow"><input id="e-try-message" v-model="tryMessage" :placeholder="lines(form.examples)[0] || 'A message to send'" @keydown.enter.prevent="tryIt">
           <button class="btn small" id="e-try" :disabled="trying || !form.model || !form.system.trim()" @click="tryIt">{{ trying ? 'Running…' : 'Run' }}</button></div>
         <div v-if="tried" id="e-try-out" class="a" :class="{ err: !tried.ok }">
-          <div v-if="tried.ok" class="body" v-html="fmt(tried.output)"></div><div v-else class="body">{{ tried.error }}</div>
+          <div v-if="tried.ok" class="body" v-code v-html="fmt(tried.output)"></div><div v-else class="body">{{ tried.error }}</div>
           <div v-if="tried.ok" class="head"><span>{{ tried.ms }} ms</span></div>
         </div>
       </div>

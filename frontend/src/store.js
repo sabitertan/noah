@@ -5,7 +5,7 @@ import { PROVIDERS } from './lib/format.js';
 import { DEFAULT_THEME, themeById, applyTheme } from './lib/themes.js';
 
 export const MODEL_ENGINES = ['llm_tools', 'llm_choice', 'laya'];  // engines that take an engine_model
-export const TITLES = { orch: 'Orchestrators', experts: 'Experts', models: 'Models', traces: 'Traces' };
+export const TITLES = { orch: 'Orchestrators', experts: 'Experts', models: 'Models', traces: 'Traces', themes: 'Themes' };
 export const VIEWS = ['chat', ...Object.keys(TITLES)];
 export const IS_WASM = import.meta.env.MODE === 'wasm';   // the browser-only build: Python runs in the page (src/wasm/)
 export const MODEL_TABS = ['local', 'hf', 'or', 'az'];  // Models page: my models, Hugging Face, OpenRouter, Azure Foundry
