@@ -1,29 +1,48 @@
 <script setup>
-// Create or edit an expert. A generate expert (a model plus a prompt) is fully editable; a tool expert runs Python code,
-// so only how it is routed (description and examples) can be changed here: its code stays in files.
-import { reactive, ref, computed, onMounted } from 'vue';
+// Create or edit an expert. Settings: a form for the routing text and, for a generate expert, its model and prompt.
+// Files: every file of the expert in a code editor, checked before saving and kept as versions (ExpertFiles).
+import { reactive, ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { send, getJson } from '../lib/api.js';
 import { fmt } from '../lib/format.js';
 import { cfg, modelGroups, refreshConfig, go } from '../store.js';
+
+const ExpertFiles = defineAsyncComponent(() => import('./ExpertFiles.vue'));   // brings Monaco: loaded only when opened
 
 const props = defineProps({ name: String });   // an expert's name, or 'new'
 const isNew = props.name === 'new';
 const kind = ref('generate');
 const isTool = computed(() => kind.value === 'tool');
+const tab = ref('settings'), filesRef = ref(null);
+async function openTab(t) {
+  if (t === tab.value) return;
+  if (tab.value === 'files' && filesRef.value?.dirty && !confirm('Leave the files with unsaved changes? They will be lost.')) return;
+  if (t === 'settings' && tab.value === 'files') await reloadForm();   // the files may have changed expert.yaml
+  tab.value = t;
+}
+function back() {
+  if (tab.value === 'files' && filesRef.value?.dirty && !confirm('Leave the files with unsaved changes? They will be lost.')) return;
+  go('experts');
+}
 const form = reactive({ name: '', description: '', examples: '', model: cfg.value.models[0] || '', system: '', shots: [], strip: '', license: 'user' });
 const loading = ref(!isNew), error = ref(''), saving = ref(false), confirming = ref(false);
 const groups = computed(() => modelGroups('', form.model));
 const lines = text => text.split('\n').map(l => l.trim()).filter(Boolean);
 
-onMounted(async () => {
-  if (isNew) return;
+async function reloadForm() {
   try {
     const m = await getJson(`/api/experts/${encodeURIComponent(props.name)}/manifest`);
     if (m.detail) throw new Error(m.detail);
     kind.value = m.kind;
     Object.assign(form, { name: m.name, description: m.description, examples: (m.examples || []).join('\n'), model: m.model || form.model, system: m.system || '',
       shots: (m.shots || []).map(s => ({ ...s })), strip: (m.strip || []).join('\n'), license: m.license || 'user' });
+    error.value = '';
   } catch (e) { error.value = e.message; }
+}
+onMounted(async () => {
+  if (isNew) return;
+  await reloadForm();
+  if (isTool.value || error.value || props.name in (cfg.value.expert_errors || {})) tab.value = 'files';   // a tool is mostly its code; a broken expert is fixed there
+  if (tab.value === 'files') error.value = '';
   loading.value = false;
 });
 
@@ -63,13 +82,22 @@ const addShot = () => form.shots.push({ user: '', assistant: '' });
 </script>
 
 <template>
-  <section class="view active" id="v-experts"><div class="panel" id="expertEditor">
-    <button class="btn small back" id="e-back" @click="go('experts')">← Experts</button>
+  <section class="view active" id="v-experts"><div class="panel" :class="{ wide: tab === 'files' }" id="expertEditor">
+    <button class="btn small back" id="e-back" @click="back">← Experts</button>
     <h2>{{ isNew ? 'New expert' : 'Edit ' + name }}</h2>
     <p v-if="loading" class="lede">Loading…</p>
     <template v-else>
+      <div v-if="!isNew" class="tabs" role="tablist">
+        <button class="tab" :class="{ active: tab === 'settings' }" role="tab" :aria-selected="tab === 'settings'" data-etab="settings" @click="openTab('settings')">Settings</button>
+        <button class="tab" :class="{ active: tab === 'files' }" role="tab" :aria-selected="tab === 'files'" data-etab="files" @click="openTab('files')">Files</button>
+      </div>
+      <template v-if="tab === 'files'">
+        <p class="lede">Every file of <code>experts/{{ name }}/</code>. Saving checks the draft first (YAML, the manifest, Python syntax and lint, then loading every expert with it) and writes nothing if that finds an error. Each save is kept as a version you can compare and switch back to.</p>
+        <ExpertFiles ref="filesRef" :name="name" />
+      </template>
+    <template v-else>
       <p v-if="isNew" class="lede">A <b>generate</b> expert is a small model with a job: you describe it, give example messages so Noah can route to it, and write the prompt that makes the model do that one thing.</p>
-      <p v-if="isTool" class="lede" id="e-toolnote">This expert runs Python code (<code>experts/{{ name }}/tool.py</code>), so its code can only be changed in that file. You can change how Noah routes messages to it below.</p>
+      <p v-if="isTool" class="lede" id="e-toolnote">This expert runs Python code (<code>experts/{{ name }}/tool.py</code>): change it in the <b>Files</b> tab. Here you can change how Noah routes messages to it.</p>
 
       <div class="form wide">
         <label>Name</label>
@@ -133,6 +161,7 @@ const addShot = () => form.shots.push({ user: '', assistant: '' });
           <div v-if="tried.ok" class="head"><span>{{ tried.ms }} ms</span></div>
         </div>
       </div>
+    </template>
     </template>
   </div></section>
 </template>

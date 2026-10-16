@@ -7,6 +7,11 @@ import uvicorn
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["--check-experts"]:  # the expert editor's load check: a child process, since frozen there is no `python -m`
+        from noah.expert_check import main as check
+
+        check(sys.argv[2:])
+        return
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)

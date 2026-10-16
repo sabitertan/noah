@@ -4,6 +4,7 @@ from typing import Any, Awaitable, Callable, TypeVar
 import hmac
 import importlib.util
 import json
+import logging
 import os
 import time
 from dataclasses import asdict
@@ -21,7 +22,7 @@ from .engines.base import DecisionEngine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
 from .generate import answer
-from . import azure, expert_store, hf, llm, openrouter
+from . import azure, expert_files, expert_store, hf, llm, openrouter
 from .orchestrator import Orchestrator
 from .registry import load_experts
 from .types import Expert
@@ -112,13 +113,28 @@ if HAS_LAYA:
     DEFAULT_PROFILES.append({"name": "Laya decision", "engine": "laya", "mode": "route", "extractor": "openai_compat",
                              "model": "qwen2.5:0.5b", "engine_model": "english", "threshold": 0.1})
 EXPERTS_DIR = Path(os.environ.get("NOAH_EXPERTS", "experts"))
-experts = load_experts(EXPERTS_DIR)
+EXPERT_ERRORS: dict[str, str] = {}   # folder name -> why it did not load; shown on the Experts page so it can be fixed in the editor
+log = logging.getLogger("noah")
+
+
+def _load_all() -> dict[str, Expert]:
+    """Every expert that loads. A broken one (say, a tool.py edited by hand) is left out and reported, never fatal."""
+    errors: dict[str, BaseException] = {}
+    loaded = load_experts(EXPERTS_DIR, errors)
+    EXPERT_ERRORS.clear()
+    EXPERT_ERRORS.update({n: f"{type(e).__name__}: {e}" for n, e in errors.items()})
+    for n, why in EXPERT_ERRORS.items():
+        log.warning("expert %s did not load: %s", n, why)
+    return loaded
+
+
+experts = _load_all()
 
 
 def _reload_experts() -> None:
     """Pick up what the editor just wrote. Engines and the orchestrator read this dict per request, so nothing else needs resetting
     (the embedding engine caches by each expert's card text, so an edit is re-embedded on its own)."""
-    fresh = load_experts(EXPERTS_DIR)
+    fresh = _load_all()
     experts.clear()
     experts.update(fresh)
 trace = TraceStore()
@@ -199,6 +215,7 @@ def config(request: Request):
                      "parameters": e.parameters, "examples": e.examples,
                      "kind": e.kind, "model": e.model.get("id", ""),
                      "enabled": e.name not in _disabled()} for e in experts.values()],
+        "expert_errors": EXPERT_ERRORS,
     }
 
 
@@ -244,15 +261,95 @@ def get_expert_manifest(name: str):
 @app.post("/api/experts", status_code=201)
 def create_expert(body: expert_store.ExpertIn):
     name = _editor(lambda: expert_store.create(EXPERTS_DIR, body))
+    expert_files.record(VERSIONS, name, expert_files.read_files(EXPERTS_DIR / name), "Created in Noah")
     _reload_experts()
     return expert_store.read(EXPERTS_DIR, name)
 
 
 @app.put("/api/experts/{name}/manifest")
 def update_expert(name: str, body: expert_store.ExpertIn):
+    _editor(lambda: expert_files.baseline(VERSIONS, EXPERTS_DIR, name))
     _editor(lambda: expert_store.update(EXPERTS_DIR, name, body))
+    expert_files.record(VERSIONS, name, expert_files.read_files(EXPERTS_DIR / name), "Edited settings")
     _reload_experts()
     return expert_store.read(EXPERTS_DIR, name)
+
+
+# ---- every file of an expert, in the code editor ----
+VERSIONS = Path(os.environ.get("NOAH_EXPERT_VERSIONS", "data/expert_versions"))
+CODE_EDIT = os.environ.get("NOAH_CODE_EDIT", "")   # "1": Python may be changed from any client; "0": from none; default: this machine only
+
+
+def _code_edit_allowed(request: Request) -> bool:
+    """Saving Python means the server runs it, so by default only someone at this machine may. The custom header keeps other
+    web sites out (a cross-site page cannot send it without a CORS preflight, which we never answer) and the Host check stops
+    a DNS-rebinding page, which arrives under its own host name."""
+    if CODE_EDIT == "0" or request.headers.get("x-noah-code") != "1":
+        return False
+    host = request.headers.get("host", "").rsplit(":", 1)[0].strip("[]").lower()
+    return CODE_EDIT == "1" or (_is_local(request) and host in ("127.0.0.1", "localhost", "::1"))
+
+
+class FilesIn(BaseModel):
+    files: dict[str, str]
+    base: str = ""     # the hash the editor loaded, so a save never overwrites changes made elsewhere
+    note: str = Field(default="", max_length=200)
+
+
+class RestoreIn(BaseModel):
+    base: str = ""
+
+
+def _saved(name: str, result: dict[str, Any]) -> Any:
+    if not result["saved"]:
+        return JSONResponse({"detail": "Not saved: fix the errors first.", **result}, status_code=422)
+    _reload_experts()
+    return result
+
+
+@app.get("/api/experts/{name}/files")
+def get_expert_files(name: str, request: Request):
+    folder = _editor(lambda: expert_files._folder(EXPERTS_DIR, name))  # pyright: ignore[reportPrivateUsage]
+    files = expert_files.read_files(folder)
+    allowed = _code_edit_allowed(request)
+    return {"name": name, "files": files, "hash": expert_files.digest(files), "code_editable": allowed,
+            "code_note": "" if allowed else expert_files.CODE_REFUSED, "editable": list(expert_files.EDITABLE)}
+
+
+@app.post("/api/experts/{name}/files/check")
+def check_expert_files(name: str, body: FilesIn, request: Request, load: bool = True):
+    """Lint (load=false: what the editor runs as you type) or lint and load a draft, without saving it.
+    Loading runs the draft's Python, so changed code needs the same permission as a save."""
+    folder = _editor(lambda: expert_files._folder(EXPERTS_DIR, name))  # pyright: ignore[reportPrivateUsage]
+    if load and expert_files.code_changed(expert_files.read_files(folder), body.files) and not _code_edit_allowed(request):
+        raise HTTPException(403, expert_files.CODE_REFUSED)
+    return _editor(lambda: expert_files.check(EXPERTS_DIR, name, body.files, load=load))
+
+
+@app.put("/api/experts/{name}/files")
+def save_expert_files(name: str, body: FilesIn, request: Request):
+    allowed = _code_edit_allowed(request)
+    return _saved(name, _editor(lambda: expert_files.save(EXPERTS_DIR, VERSIONS, name, body.files, base=body.base,
+                                                          note=body.note, allow_code=allowed)))
+
+
+@app.get("/api/experts/{name}/versions")
+def expert_versions(name: str):
+    return _editor(lambda: expert_files.list_versions(VERSIONS, EXPERTS_DIR, name))
+
+
+@app.get("/api/experts/{name}/versions/{vid}")
+def expert_version(name: str, vid: int):
+    return _editor(lambda: expert_files.get_version(VERSIONS, name, vid))
+
+
+@app.post("/api/experts/{name}/versions/{vid}/restore")
+def restore_expert_version(name: str, vid: int, body: RestoreIn, request: Request):
+    """Switch to a version: its files are saved as the expert's files, through the same checks as any save."""
+    v = _editor(lambda: expert_files.get_version(VERSIONS, name, vid))
+    allowed = _code_edit_allowed(request)
+    return _saved(name, _editor(lambda: expert_files.save(EXPERTS_DIR, VERSIONS, name, v["files"], base=body.base,
+                                                          note=f"Switched to version {vid}", allow_code=allowed)))
 
 
 @app.delete("/api/experts/{name}")

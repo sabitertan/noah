@@ -227,8 +227,26 @@ def run_checks(pg: Page, base: str, stub_url: str, data: Path, has_az_cli: bool,
     pg.goto(base + "#/experts/pirate"); pg.reload(); pg.wait_for_selector("#e-description")
     check("refresh stays in the editor and shows the saved edit", pg.input_value("#e-description") == "Pirate talk, edited.")
     pg.click("#e-cancel"); pg.wait_for_selector("[data-expert=pirate]"); check("cancel returns to the list", pg.evaluate("location.hash") == "#/experts")
-    # a tool expert: routing text only, its code is never offered or written
-    pg.click("[data-expert=calc] h3 .grow"); pg.wait_for_selector("#e-toolnote")
+    # a tool expert opens on its files: a broken edit is refused, a good one is saved as a version, and the old one comes back
+    pg.click("[data-expert=calc] h3 .grow"); pg.wait_for_selector("#x-editor .view-lines", timeout=30000)
+    check("tool expert opens on its files in the code editor", pg.locator(".xfile").all_inner_texts()[:2] == ["expert.yaml", "tool.py"]
+          and pg.locator("[data-etab=files].active").count() == 1)
+    original = (data / "experts" / "calc" / "tool.py").read_bytes()
+    pg.click("#x-editor .view-lines"); pg.keyboard.press("Control+End"); pg.keyboard.type("\nx = not_defined\n")
+    pg.wait_for_selector(".xproblem.error", timeout=5000)
+    check("lint runs while typing", "not_defined" in pg.inner_text("#x-problems"))
+    pg.click("#x-save"); pg.wait_for_selector("#x-error")
+    check("a save with an error writes nothing", "Nothing was written" in pg.inner_text("#x-error") and (data / "experts" / "calc" / "tool.py").read_bytes() == original)
+    pg.click("#x-discard"); pg.click("#x-editor .view-lines"); pg.keyboard.press("Control+End"); pg.keyboard.type("\n# edited\n")
+    pg.fill("#x-note", "a comment"); pg.click("#x-save"); pg.wait_for_selector("#x-notice")
+    check("a good save is written and kept as a version", b"# edited" in (data / "experts" / "calc" / "tool.py").read_bytes()
+          and pg.locator(".xversion").count() == 2 and "a comment" in pg.locator(".xversion").first.inner_text())
+    pg.locator(".xversion[data-version='1'] button", has_text="Switch to").click()
+    pg.wait_for_function("document.querySelectorAll('.xversion').length === 3")
+    check("switching to the first version restores the original code", (data / "experts" / "calc" / "tool.py").read_bytes() == original)
+    shot("expert-files.png")
+    # its settings: routing text only
+    pg.click("[data-etab=settings]"); pg.wait_for_selector("#e-toolnote")
     check("tool expert shows no model, prompt or delete", all(pg.locator(sel).count() == 0 for sel in ("#e-model", "#e-system", "#e-strip", "#e-delete")))
     pg.fill("#e-examples", pg.input_value("#e-examples") + "\nadd 2 and 2"); pg.click("#e-save"); pg.wait_for_selector("[data-expert=calc]")
     check("tool expert routing edited", "add 2 and 2" in (data / "experts" / "calc" / "expert.yaml").read_text())
@@ -375,7 +393,7 @@ def main() -> None:
                "NOAH_OR_BASE": f"{stub_url}/or/api/v1", "NOAH_HF_TOKEN_FILE": str(data / "hf_token"), "NOAH_HF_MODELS": str(data / "hf_models.json"),
                "NOAH_OR_TOKEN_FILE": str(data / "or_key"), "NOAH_OR_MODELS": str(data / "or_models.json"), "NOAH_AZ_TOKEN_FILE": str(data / "az_key"),
                "NOAH_AZ_SETTINGS": str(data / "az.json"), "NOAH_AZ_MODELS": str(data / "az_models.json"), "NOAH_PROFILES": str(data / "profiles.json"),
-               "NOAH_DISABLED_EXPERTS": str(data / "d.json"), "NOAH_EXPERTS": str(data / "experts"), "NOAH_TRACES": str(data / "traces.jsonl"), "NOAH_FILES_DIR": str(ROOT / "data/files"),
+               "NOAH_DISABLED_EXPERTS": str(data / "d.json"), "NOAH_EXPERTS": str(data / "experts"), "NOAH_EXPERT_VERSIONS": str(data / "versions"), "NOAH_TRACES": str(data / "traces.jsonl"), "NOAH_FILES_DIR": str(ROOT / "data/files"),
                "HF_TOKEN": "", "OPENROUTER_API_KEY": "", "AZURE_FOUNDRY_API_KEY": "", "AZURE_OPENAI_API_KEY": "", "AZURE_FOUNDRY_ENDPOINT": "", "AZURE_OPENAI_ENDPOINT": ""}
         server = subprocess.Popen([sys.executable, "-m", "uvicorn", "noah.server:app", "--port", str(port)], cwd=ROOT, env=env,
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

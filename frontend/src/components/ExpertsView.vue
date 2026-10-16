@@ -14,7 +14,11 @@ async function toggle(e, ev) {
 <template>
   <ExpertEditor v-if="expertSub" :key="expertSub" :name="expertSub" />
   <section v-else class="view active" id="v-experts"><div class="panel" id="expertsPanel">
-    <h2>Experts</h2><p class="lede">An expert is one small job: a model with a prompt (<b>generate</b>), or a Python tool. Select one to edit how it is routed (and, for generate experts, its prompt and model), or create your own. Tool experts are folders in <code>experts/</code> with a <code>tool.py</code>; add those by hand.</p>
+    <h2>Experts</h2><p class="lede">An expert is one small job: a model with a prompt (<b>generate</b>), or a Python tool. Select one to edit its settings or, under <b>Files</b>, every file it is made of (code included), with versions you can switch between. Create your own generate experts here; a new tool expert is a folder in <code>experts/</code> with a <code>tool.py</code>.</p>
+    <div v-for="(why, n) in cfg.expert_errors || {}" :key="n" class="hfbox broken" :data-broken="n">
+      <b>{{ n }}</b> did not load, so Noah leaves it out: <code>{{ why }}</code>
+      <button class="btn small" @click="openExpert(n)">Fix its files</button>
+    </div>
     <div class="cards">
       <div v-for="e in cfg.experts" :key="e.name" class="card click" :class="{ off: !e.enabled }" :data-expert="e.name" title="Edit" @click="openExpert(e.name)">
         <h3><UiIcon name="box" /><span class="grow">{{ e.name }}</span>

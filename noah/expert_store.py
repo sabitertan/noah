@@ -118,7 +118,10 @@ def read(root: Path, name: str) -> dict[str, Any]:
     path = _manifest_path(root, name)
     if not path.is_file():
         raise ExpertError(f"Unknown expert '{name}'", 404)
-    m = _load(path)
+    try:
+        m = _load(path)
+    except yaml.YAMLError as e:
+        raise ExpertError(f"expert.yaml is not valid YAML ({e.__class__.__name__}). Fix it in the Files tab.", 422)
     kind = m.get("kind", "tool")
     return {"name": name, "kind": kind, "description": m.get("description", ""), "examples": m.get("examples", []),
             "model": cast(dict[str, Any], m.get("model") or {}).get("id", ""), "system": m.get("system", ""), "shots": m.get("shots", []),

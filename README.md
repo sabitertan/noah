@@ -49,7 +49,7 @@ Regenerate them against a running server with `python scripts/readme_shots.py` (
 |---|---|---|
 | Chat | Ask anything; pick an orchestrator and Route / Fan-out; open "routing decision" to see every expert's score; file results open in place | `#/chat`, `#/chat/<id>` |
 | Orchestrators | Cards for saved profiles with an on/off switch each; the editor below changes a draft that the selected card shows live ("unsaved") until you Save | `#/orch` |
-| Experts | Every expert with its examples and an on/off switch | `#/experts` |
+| Experts | Every expert with its examples and an on/off switch; select one for its settings or all its files in a code editor, with checks before saving and versions | `#/experts`, `#/experts/<name>` |
 | Models | Tabs: **My models** (every model and where it runs), **Hugging Face** (hosted or GGUF download), **OpenRouter** and **Azure Foundry** (hosted) | `#/models`, `#/models/hf`, `#/models/or`, `#/models/az` |
 | Traces | Every routing decision, the raw material for fine-tuning | `#/traces` |
 
@@ -376,9 +376,28 @@ used immediately, with no restart. It is written to `experts/<name>/expert.yaml`
 
 ![The expert editor for the C# expert: description, examples, model, system prompt and a Try it box with a real answer](docs/expert-editor.png)
 
-- **Tool experts run Python** (`tool.py`), so the UI never lets a browser write code that the server then executes. For those you can change how they are routed (description and examples); their code, parameters and model stay in the files, and they cannot be deleted from the UI.
+**Every file, in a code editor:** an expert's **Files** tab (where tool experts open) shows all of `experts/<name>/` in Monaco,
+the editor of VS Code: `expert.yaml`, `tool.py` and any `.py`, `.yaml`, `.json`, `.md` or `.txt` you add. As you type,
+YAML, the manifest and Python (syntax and [pyflakes](https://github.com/PyCQA/pyflakes)) are linted and marked in place.
+**Check** and **Save** go further: they load *every* expert with your draft in place, in a separate process with a time
+limit, the way the server would, and call the tool's `extract_rule` on its own examples. If that finds an error, nothing is
+written. Warnings (an unused import, say) do not block a save. Ctrl/⌘+S saves.
+
+**Versions:** each save, from either tab, is kept as a version under `data/expert_versions/<name>/`, starting with how the
+files were before your first edit in Noah. **Compare** shows a version next to your draft; **Switch to** makes it the
+current files again, through the same checks (it is recorded as a new version, so switching is never lost either).
+
+- **Python is code the server runs**, so changing a `.py` file is only allowed from the computer running Noah: a loopback
+  connection with a loopback host name (which also keeps other web sites and DNS-rebinding pages out). Elsewhere `.py`
+  files are read-only and everything else stays editable. `NOAH_CODE_EDIT=1` allows code edits from any client (needed in
+  Docker, where the browser is not on the container's loopback; then publish the port on `127.0.0.1` only, or anyone who
+  can reach port 8765 can run code on it); `NOAH_CODE_EDIT=0` turns them off everywhere.
+- **A broken expert** (say, a `tool.py` edited by hand) no longer stops the server: it is left out, and the Experts page
+  says why, with a button that opens its files.
+- **Tool experts** cannot be deleted from the UI, and new ones are still made by adding a folder with an `expert.yaml`
+  and a `tool.py` (then edit them here).
 - **Names** are fixed once created (a folder name and the tool name an orchestrator calls): create a new expert and delete the old one to rename.
-- **Built-in experts are plain files in `experts/`**, so editing or deleting one in the UI changes that file (use git to get it back).
+- **Built-in experts are plain files in `experts/`**, so editing one in the UI changes that file (switch back to its first version, or use git).
 
 **Or by hand:** create `experts/<name>/expert.yaml` (the app reloads when you save). Two kinds:
 

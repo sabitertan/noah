@@ -17,6 +17,7 @@ dependencies = [
   "fastembed>=0.7",
   "numpy>=1.26",
   "pypdf>=5",
+  "pyflakes>=3",  # the expert editor lints Python before saving it
 ]
 
 [project.optional-dependencies]

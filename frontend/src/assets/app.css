@@ -214,3 +214,56 @@ textarea { font: inherit; resize: vertical; }
 .tryit h3 { margin: 0 0 6px; font-size: 14px; }
 .tryit h3 .meta { color: var(--muted); font-size: 11px; font-weight: 400; margin-left: 6px; }
 .tryit .a .body { white-space: pre-wrap; }
+
+/* experts: every file in a code editor, with problems and versions */
+.panel.wide { max-width: 1320px; }
+.hfbox.broken { border-color: var(--err); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.hfbox.broken code { flex: 1 1 260px; overflow-wrap: anywhere; color: var(--err); }
+.fnote.ok { color: var(--ok); }
+.xgrid { display: grid; grid-template-columns: 190px minmax(0, 1fr) 230px; gap: 14px; align-items: start; }
+.xhead { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 6px; }
+.xhead .meta { text-transform: none; letter-spacing: 0; margin-left: 6px; }
+.xlist, .xversions, .xproblems { border: 1px solid color-mix(in srgb, var(--border) 50%, transparent); border-radius: 10px; background: var(--panel); padding: 8px; }
+.xfile { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px; cursor: pointer; overflow-wrap: anywhere; }
+.xfile:hover { background: var(--raised); }
+.xfile.active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.xfiles .grow { flex: 1; min-width: 0; }
+.xdot { color: var(--warn); font-size: 10px; }
+.xcount { font-size: 11px; border-radius: 8px; padding: 0 5px; color: var(--accent-ink); }
+.xcount.err { background: var(--err); }
+.xcount.warn { background: var(--warn); }
+.xlock { color: var(--muted); font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 0 3px; }
+.xdel { background: none; border: 0; color: var(--muted); padding: 0 3px; visibility: hidden; }
+.xfile:hover .xdel, .xdel.yes { visibility: visible; }
+.xdel:hover, .xdel.yes { color: var(--err); }
+.xnew { display: flex; gap: 6px; margin-top: 8px; }
+.xnew input { flex: 1; min-width: 0; padding: 4px 7px; font-size: 12px; }
+.xmain { min-width: 0; }
+.xeditor { height: 62vh; min-height: 320px; border: 1px solid color-mix(in srgb, var(--border) 50%, transparent); border-radius: 10px; overflow: hidden; }
+.xmain .actions { align-items: center; margin-top: 10px; }
+.xcomparebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.xcomparebar select { padding: 4px 7px; }
+.xfiles .meta { color: var(--muted); font-size: 11px; }
+.xproblems { margin-top: 12px; max-height: 220px; overflow-y: auto; }
+.xproblem { display: flex; gap: 8px; align-items: baseline; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
+.xproblem:hover { background: var(--raised); }
+.xproblem .sev { width: 12px; flex: none; }
+.xproblem.error .sev { color: var(--err); }
+.xproblem.warning .sev { color: var(--warn); }
+.xproblem .loc { color: var(--accent); flex: none; }
+.xproblem .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.xversions { max-height: calc(62vh + 120px); overflow-y: auto; }
+.xversion { padding: 7px 6px; border-top: 1px solid color-mix(in srgb, var(--border) 35%, transparent); }
+.xversion:first-of-type { border-top: 0; }
+.xversion.current { background: color-mix(in srgb, var(--ok) 8%, transparent); border-radius: 6px; }
+.xversion.open { outline: 1px solid var(--accent); border-radius: 6px; }
+.xversion .note { color: var(--muted); font-size: 12px; margin: 2px 0 5px; overflow-wrap: anywhere; }
+.xvact { display: flex; gap: 6px; }
+@media (max-width: 1100px) {
+  .xgrid { grid-template-columns: 170px minmax(0, 1fr); }
+  .xversions { grid-column: 1 / -1; max-height: none; }
+}
+@media (max-width: 720px) {
+  .xgrid { grid-template-columns: minmax(0, 1fr); }
+  .xeditor { height: 55vh; }
+}

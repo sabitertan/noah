@@ -1,4 +1,5 @@
-"""Creating, editing and deleting experts from the UI. Generate experts are data and fully editable; tool experts run code and are not."""
+"""Creating, editing and deleting experts with the settings form. Generate experts are data and fully editable there; for tool
+experts the form only changes routing text. Their code is edited through the files API, with checks and versions (test_expert_files.py)."""
 import shutil
 from pathlib import Path
 from typing import Any, Iterator
@@ -22,6 +23,7 @@ def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     monkeypatch.setattr(server, "EXPERTS_DIR", dst)
     monkeypatch.setattr(server, "DISABLED", tmp_path / "disabled.json")
     monkeypatch.setattr(server, "PROFILES", tmp_path / "profiles.json")
+    monkeypatch.setattr(server, "VERSIONS", tmp_path / "versions")
     server._reload_experts()  # pyright: ignore[reportPrivateUsage]
     yield dst
     monkeypatch.undo()
