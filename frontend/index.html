@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Noah</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script>/* replay the saved theme before the app loads (lib/themes.js writes it) */
+try { const t = JSON.parse(localStorage.getItem('noah.themeVars')); const r = document.documentElement;
+  for (const k in t.vars) r.style.setProperty('--' + k, t.vars[k]); r.classList.toggle('light', !t.dark); r.style.colorScheme = t.dark ? 'dark' : 'light'; } catch (e) {}</script>
 </head>
 <body>
 <div id="app"></div>

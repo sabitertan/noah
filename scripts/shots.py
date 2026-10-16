@@ -19,6 +19,6 @@ with sync_playwright() as p:
     pg.click("[data-view=orch]"); pg.wait_for_timeout(300); pg.screenshot(path=f"{out}/3-orch.png")
     pg.click("[data-view=experts]"); pg.wait_for_timeout(300); pg.screenshot(path=f"{out}/4-experts.png")
     pg.click("[data-view=traces]"); pg.wait_for_timeout(500); pg.screenshot(path=f"{out}/5-traces.png")
-    pg.click("#themeBtn"); pg.click("[data-view=models]"); pg.wait_for_timeout(300); pg.screenshot(path=f"{out}/6-light-models.png")
+    pg.click("#themeBtn"); pg.click("[data-theme=light-modern]"); pg.click("[data-view=models]"); pg.wait_for_timeout(300); pg.screenshot(path=f"{out}/6-light-models.png")
     print("console errors:", errs or "none")
     b.close()

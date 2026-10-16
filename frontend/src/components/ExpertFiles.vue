@@ -4,8 +4,8 @@
 // version, and any version can be compared with the draft and switched to (which is checked the same way).
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { codeFetch } from '../lib/api.js';
-import { monaco, languageOf } from '../lib/monaco.js';
-import { light, refreshConfig } from '../store.js';
+import { monaco, languageOf, editorTheme } from '../lib/monaco.js';
+import { themeInfo, refreshConfig } from '../store.js';
 
 const props = defineProps({ name: String });
 const enc = encodeURIComponent(props.name);
@@ -210,8 +210,8 @@ function closeCompare() {
 watch(compareFile, () => showDiff());
 
 /* ---------- lifecycle ---------- */
-const theme = () => (light.value ? 'noah-light' : 'noah-dark');
-watch(light, () => monaco.editor.setTheme(theme()));
+const theme = () => editorTheme(themeInfo.value);
+watch(themeInfo, () => monaco.editor.setTheme(theme()));
 const guard = e => { if (dirty.value) { e.preventDefault(); e.returnValue = ''; } };
 onMounted(async () => {
   editor = monaco.editor.create(host.value, { automaticLayout: true, theme: theme(), fontFamily: "'Fira Code', ui-monospace, monospace", fontSize: 13,

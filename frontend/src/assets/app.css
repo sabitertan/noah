@@ -2,15 +2,11 @@
 @font-face { font-family: 'Fira Code'; font-weight: 400; font-display: swap; src: url('./fonts/FiraCode-Regular.woff2') format('woff2'); }
 @font-face { font-family: 'Fira Code'; font-weight: 600; font-display: swap; src: url('./fonts/FiraCode-SemiBold.woff2') format('woff2'); }
 
+/* VS Code Dark Modern. The theme picker (lib/themes.js) overrides these on <html> with the chosen VS Code theme. */
 :root {
-  --bg: #282c34; --fg: #9cdef2; --panel: #111214; --raised: #1b1e24; --border: #355a66;
-  --accent: #61afef; --accent-ink: #0d1520; --muted: #6b8a94; --ok: #50fa7b; --warn: #f0ad4e; --err: #ff6b6b;
-  --bar: #2c4a54;
-}
-:root.light {
-  --bg: #f5f5f5; --fg: #2b2b2b; --panel: #ffffff; --raised: #ececec; --border: #bbb;
-  --accent: #2563eb; --accent-ink: #fff; --muted: #6b7280; --ok: #1f9d55; --warn: #b7791f; --err: #c0392b;
-  --bar: #d7dde0;
+  --bg: #1f1f1f; --fg: #cccccc; --panel: #181818; --raised: #202020; --border: #2b2b2b;
+  --accent: #0078d4; --accent-ink: #ffffff; --muted: #9d9d9d; --ok: #3fb950; --warn: #cca700; --err: #f85149;
+  --bar: #313131; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; overflow: hidden; }
@@ -40,6 +36,8 @@ body.collapsed .sidebar { margin-left: -250px; }
 .dot.on { background: var(--ok); }
 .group-body { margin-left: 6px; border-left: 1px solid color-mix(in srgb, var(--border) 40%, transparent); padding-left: 4px; }
 .group-body.closed { display: none; }
+.theme-label { color: var(--muted); font-size: 11px; padding: 6px 10px 2px; text-transform: uppercase; letter-spacing: .06em; }
+.swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid; flex: none; }
 .chev { transition: transform .15s; margin-left: auto; color: var(--muted) !important; }
 .open > .chev { transform: rotate(90deg); }
 .chat-item .del { opacity: 0; color: var(--muted); }

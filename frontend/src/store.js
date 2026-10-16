@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch } from 'vue';
 import { send, getJson, store } from './lib/api.js';
 import { PROVIDERS } from './lib/format.js';
+import { DEFAULT_THEME, themeById, applyTheme } from './lib/themes.js';
 
 export const MODEL_ENGINES = ['llm_tools', 'llm_choice', 'laya'];  // engines that take an engine_model
 export const TITLES = { orch: 'Orchestrators', experts: 'Experts', models: 'Models', traces: 'Traces' };
@@ -17,7 +18,7 @@ export const chats = ref(store.get('chats', []));
 export const currentChat = ref(store.get('current', null));
 export const activeProfile = ref(store.get('profile', 'Default'));
 export const groups = reactive(store.get('groups', { chats: true, setup: true }));
-export const light = ref(store.get('light', false));
+export const theme = ref(store.get('theme', store.get('light', false) ? 'light-modern' : DEFAULT_THEME));  // 'light' was the old on/off switch
 export const collapsed = ref(false);
 export const busy = ref(false);
 export const ready = ref(false);  // config and profiles loaded; views mount after this
@@ -25,6 +26,7 @@ export const ready = ref(false);  // config and profiles loaded; views mount aft
 /* ---------- derived ---------- */
 export const enabledProfiles = computed(() => profiles.value.filter(isOn));
 export const current = computed(() => enabledProfiles.value.find(p => p.name === activeProfile.value) || enabledProfiles.value[0]);  // never a disabled one
+export const themeInfo = computed(() => themeById(theme.value));
 export const chatObj = computed(() => chats.value.find(c => c.id === currentChat.value));
 export const messages = computed(() => chatObj.value?.messages || []);
 export const hostedModels = computed(() => [...(cfg.value.hf_models || []), ...(cfg.value.or_models || []), ...(cfg.value.az_models || [])]);  // 'hf:…' / 'or:…' / 'az:…' ids the user added
@@ -81,7 +83,7 @@ watch([view, currentChat, modelsTab, expertSub], syncUrl);
 watch(activeProfile, v => store.set('profile', v));
 watch(currentChat, v => store.set('current', v));
 watch(groups, v => store.set('groups', { ...v }), { deep: true });
-watch(light, v => { document.documentElement.classList.toggle('light', v); store.set('light', v); }, { immediate: true });
+watch(themeInfo, t => { applyTheme(t); store.set('theme', t.id); }, { immediate: true });
 watch(collapsed, v => document.body.classList.toggle('collapsed', v), { immediate: true });
 watch(current, c => { if (c && activeProfile.value !== c.name) activeProfile.value = c.name; });  // fall back if the active one was switched off or deleted
 watch([chats, currentChat], () => {  // file previews can be large and a pending answer is not worth keeping: drop both

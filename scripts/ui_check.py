@@ -360,8 +360,12 @@ def run_checks(pg: Page, base: str, stub_url: str, data: Path, has_az_cli: bool,
     check("unknown tab falls back to My models", pg.locator("#modelsTable").is_visible())
 
     # ---- theme and sidebar ----
-    pg.click("#themeBtn"); check("light theme", pg.evaluate("document.documentElement.classList.contains('light')"))
-    pg.reload(); pg.wait_for_selector(".sidebar"); check("theme persists", pg.evaluate("document.documentElement.classList.contains('light')")); pg.click("#themeBtn")
+    bg = "getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()"
+    check("Dark Modern by default", pg.evaluate(bg) == "#1f1f1f")
+    pg.click("#themeBtn"); pg.click("[data-theme=github-light]")
+    check("light theme", pg.evaluate("document.documentElement.classList.contains('light')") and pg.evaluate(bg) == "#ffffff")
+    pg.reload(); pg.wait_for_selector(".sidebar"); check("theme persists", pg.evaluate("document.documentElement.classList.contains('light')"))
+    pg.click("[data-theme=dark-modern]"); pg.click("#themeBtn")
     pg.click("#hamb"); check("sidebar collapses", pg.evaluate("document.body.classList.contains('collapsed')")); pg.click("#hamb2")
     nav("traces"); pg.wait_for_timeout(600); check("traces are listed", pg.locator("#tracesPanel tbody tr").count() >= 1)
 
