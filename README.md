@@ -8,6 +8,8 @@ Layered tiny-model orchestration. You pick a **decision engine** and an **orches
 small **expert** (a tiny model, a tool, or both). Every decision is traced, so you can later fine-tune your own.
 Models can run locally (Ollama) or hosted by Hugging Face, OpenRouter or your own Azure Foundry resource, chosen per model. There is a web UI, a desktop app and a CLI.
 
+**Demo:** [sabitertan.github.io/noah](https://sabitertan.github.io/noah/) runs Noah entirely in your browser; connect your own [Ollama](https://ollama.com/download) for local models.
+
 ```
 message -> [decision engine] -> [orchestrator: Microsoft Agent Framework workflow] -> [expert(s)] -> answer
                                                                                          \-> trace (JSONL)
