@@ -54,20 +54,28 @@ EXAMPLES = {
 }
 
 
+DESCRIPTIONS = {"Save a short note for later.": "add_note", "List every saved note.": "list_notes", "Draw a tiny chart picture.": "draw_chart",
+                "Current weather and temperature for a city.": "get_weather", "Weather for a city": "get_weather"}
+
+
 class FakeModel:
-    """Answers the three kinds of request the MCP expert makes: write examples, pick a tool, fill a tool's arguments."""
+    """Answers the four kinds of request the MCP expert makes: write examples, name a tool (structured output), call a tool
+    (tool calling), fill a tool's arguments."""
 
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
         self.pick: tuple[str, dict[str, Any]] | None = None
+        self.choice: str | None = None   # the tool it names; None: the first it is offered (the closest)
 
     def post(self, url: str, json: Any = None, timeout: Any = None, **_: Any) -> httpx.Response:
         self.requests.append(json)
         schema = (json.get("response_format") or {}).get("json_schema", {})
         message: dict[str, Any]
         if schema.get("name") == "examples":
-            tool = re.search(r"Tool: (\w+)", json["messages"][1]["content"]).group(1)  # type: ignore[union-attr]
-            message = {"content": _json({"examples": EXAMPLES[tool]})}
+            said = re.search(r"What the tool does: (.*)", json["messages"][1]["content"]).group(1)  # type: ignore[union-attr]
+            message = {"content": _json({"examples": EXAMPLES[DESCRIPTIONS[said]]})}
+        elif schema.get("name") == "pick":
+            message = {"content": _json({"tool": self.choice or schema["schema"]["properties"]["tool"]["enum"][0]})}
         elif json.get("tools"):
             name, args = self.pick or ("none", {})
             message = {"content": None, "tool_calls": [{"function": {"name": name, "arguments": _json(args)}}]}
@@ -250,11 +258,24 @@ def let_model_choose(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["choose_tool"] is True
 
 
-def test_by_default_the_closest_tool_wins_and_the_model_only_fills_arguments(client: TestClient, model: FakeModel) -> None:
+def test_a_tool_clearly_ahead_is_taken_without_asking_the_model(client: TestClient, model: FakeModel, monkeypatch: pytest.MonkeyPatch) -> None:
     add_notes(client)
-    model.pick = ("add_note", {"text": "x"})   # would be wrong; it is never asked
+    monkeypatch.setattr(mcp_expert, "CLEAR_LEAD", -1.0)   # always clear
+    model.choice = "add_note"   # would be wrong; it is never asked
     r = ask(client, "is it raining in Oslo")["results"][0]
     assert r["args"]["tool"] == "get_weather" and r["extractor"] == "mcp:get_weather · closest tool, arguments by qwen2.5:0.5b"
+    assert not any(q.get("tools") or (q.get("response_format") or {}).get("json_schema", {}).get("name") == "pick" for q in model.requests)
+
+
+def test_when_the_closest_tools_are_close_the_model_names_one_of_them(client: TestClient, model: FakeModel, monkeypatch: pytest.MonkeyPatch) -> None:
+    add_notes(client)
+    monkeypatch.setattr(mcp_expert, "CLEAR_LEAD", 2.0)   # never clear
+    model.choice = "get_weather"
+    r = ask(client, "notes: is it raining in Oslo")["results"][0]
+    assert r["args"] == {"tool": "get_weather", "arguments": {"city": "Oslo"}} and r["extractor"] == "mcp:get_weather · chosen by qwen2.5:0.5b"
+    asked = next(q for q in model.requests if (q.get("response_format") or {}).get("json_schema", {}).get("name") == "pick")
+    assert asked["messages"][1]["content"] == "is it raining in Oslo"   # without the expert's name
+    assert set(asked["response_format"]["json_schema"]["schema"]["properties"]["tool"]["enum"]) <= set(EXAMPLES)
     assert not any(q.get("tools") for q in model.requests)
 
 
@@ -278,6 +299,29 @@ def test_a_model_that_picks_nothing_falls_back_to_the_closest_tool(client: TestC
     assert ask(client, "weather in Paris")["results"][0]["output"] == "Paris: 21 C, sunny"
 
 
+def test_examples_that_are_no_request_are_skipped_and_the_name_is_left_out() -> None:
+    tool = {"name": "list_releases", "description": "List releases", "examples": [
+        "I would type: list_releases owner/repo", "list_releases owner: octocat", "Enter your GitHub repository name, then the page",
+        "list_commits -o my_repo -p 1", "list branches {owner=octocat}", "show the releases of octocat/hello-world",
+        "show the releases of octocat/hello-world"]}
+    assert mcp_expert.tool_expert(tool).examples == ["show the releases of octocat/hello-world"]
+    assert mcp_expert._without("GitHub: list my repos", "github") == "list my repos"  # pyright: ignore[reportPrivateUsage]
+    assert mcp_expert._without("list files on my_drive", "my_drive") == "list files on"  # pyright: ignore[reportPrivateUsage]
+    assert mcp_expert._without("github", "github") == "github"  # pyright: ignore[reportPrivateUsage]
+
+
+GH_TOOL = {"name": "list_branches", "input_schema": {"type": "object", "required": ["owner", "repo"], "properties": {
+    "owner": {"type": "string"}, "repo": {"type": "string"}, "page": {"type": "number"}}}}
+
+
+def test_placeholders_for_required_arguments_are_asked_for_not_sent() -> None:
+    made_up = {"owner": "your_username", "repo": "<repository>"}
+    assert mcp_expert.missing(made_up, GH_TOOL, "list my branches", {}) == ["owner", "repo"]
+    assert mcp_expert.missing(made_up, GH_TOOL, "list my branches", {"owner": "sabitertan"}) == ["repo"]
+    assert mcp_expert.missing({"owner": "octocat", "repo": "hello-world"}, GH_TOOL, "branches of octocat/hello-world", {}) == []
+    assert mcp_expert.missing({"owner": "my-org"}, GH_TOOL, "branches of my-org's noah", {}) == ["repo"]   # said, but repo is not given
+
+
 def test_shortlist_without_embeddings_uses_keywords(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(embedder, "AVAILABLE", False)
     tools = [{"name": n, "description": d, "examples": EXAMPLES[n]} for n, d in
@@ -297,6 +341,8 @@ def test_refresh_keeps_examples_of_unchanged_tools(client: TestClient, home: Pat
     out = client.post("/api/mcp/notes/refresh", json={}).json()
     assert out == {"tools": 4, "with_examples": 4, "problems": []}
     assert json.loads(path.read_text())[0]["examples"] == ["my own example"] and len(model.requests) == before   # nothing re-written
+    out = client.post("/api/mcp/notes/refresh", json={"rewrite": True}).json()
+    assert out["with_examples"] == 4 and json.loads(path.read_text())[0]["examples"] == EXAMPLES["add_note"]
 
 
 def test_changing_the_server_in_the_editor_counts_as_code() -> None:
@@ -405,3 +451,19 @@ def test_refresh_rewrites_routing_text_noah_wrote_but_not_the_users(client: Test
     client.put("/api/experts/notes/manifest", json={"description": "My notes and the weather", "examples": ["take a note"], "model": "qwen2.5:0.5b"})
     client.post("/api/mcp/notes/refresh", json={})
     assert server.experts["notes"].description == "My notes and the weather" and server.experts["notes"].examples == ["take a note"]
+
+
+def test_when_the_models_pick_lacks_arguments_the_closest_tool_is_tried(monkeypatch: pytest.MonkeyPatch) -> None:
+    search = {"name": "search_repositories", "annotations": {"read_only_hint": True}, "input_schema": {"type": "object", "required": ["query"], "properties": {"query": {"type": "string"}}}}
+    expert = types.SimpleNamespace(name="github", tools=[search, GH_TOOL], model={"id": "m"}, defaults={})
+    monkeypatch.setattr(mcp_expert, "shortlist", lambda *a, **k: [(0.83, search), (0.80, GH_TOOL)])
+    monkeypatch.setattr(mcp_expert, "_choose", lambda *a: GH_TOOL)
+    fills = {"list_branches": {"owner": "your_username", "repo": "your_repo"}, "search_repositories": {"query": "user:sabitertan"}}
+    monkeypatch.setattr(mcp_expert, "_fill", lambda message, tool, *a: fills[tool["name"]])
+    monkeypatch.setattr(mcp_expert, "call", lambda e, tool, args: {"text": f"{tool} {args}", "files": []})
+    extractor = types.SimpleNamespace(name="rule")
+    out = mcp_expert.run(expert, "github list repos of sabitertan", extractor, "")  # type: ignore[arg-type]
+    assert out["text"] == "search_repositories {'query': 'user:sabitertan'}" and "closest tool" in out["label"]
+    fills["search_repositories"] = {"query": "user:your_username"}
+    with pytest.raises(mcp_client.McpError, match=r"search_repositories needs \*\*query\*\* \(the model wrote “user:your_username”\)"):
+        mcp_expert.run(expert, "github list my repos", extractor, "")  # type: ignore[arg-type]

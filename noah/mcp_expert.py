@@ -1,14 +1,18 @@
 """An MCP server as one expert: Noah routes a message to the server, and the expert picks one of its tools and calls it.
 
 Picking a tool, in three steps:
-1. shortlist: the message is compared with each tool's description and examples (the same embeddings the embedding engine
-   uses; keyword overlap where there are none) and the closest few are kept;
-2. pick: the closest tool, and the model fills its arguments (the extractor, with that tool's schema: structured output, which
-   any model can do). With `model.choose_tool: true` the model instead chooses among the shortlist by tool calling, unless
-   the closest tool is clearly ahead. Off by default: on a filesystem server, embeddings chose right 8 times in 10, qwen2.5
-   0.5B choosing from the shortlist 6, and qwen2.5-coder 1.5B none (Ollama gives it no tool calling);
+1. shortlist: the message, without the expert's name, is compared with each tool's description and examples (the same
+   embeddings the embedding engine uses; keyword overlap where there are none) and the closest few are kept. Examples that
+   are no request a person would type (code, the prompt echoed back; small models write those) are skipped;
+2. pick: when the closest tool is clearly ahead, it; otherwise the model names one of the shortlist (structured output with
+   their names as an enum, which any model can do). Then the model fills its arguments (the extractor, with that tool's
+   schema). On a server with many similar tools, even a small model naming one of the shortlist beats the closest tool
+   alone. With `model.choose_tool: true` the model instead calls a tool by tool calling, choosing and filling in one
+   step: for models good at tool calling;
    Then the arguments are grounded: a value the message does not contain was made up by the model, so an optional one is
-   dropped and a required one takes the expert's default (`defaults:` in expert.yaml, e.g. `path: D:/notes`) if it has one;
+   dropped and a required one takes the expert's default (`defaults:` in expert.yaml, e.g. `path: D:/notes`) if it has one.
+   A required one that is still a placeholder ("your_username") is asked for instead of sent; if the model's pick has
+   such gaps, the closest tool is tried instead;
 3. call: unless the tool is marked read-only (or the user said "always allow" for it), Noah asks first: the result carries
    `confirm` and the chat shows Run / Always allow / Cancel; Run goes to /api/mcp/run.
 
@@ -33,7 +37,7 @@ from .extractors.openai_compat import OpenAICompatExtractor
 from .llm import LLMError, chat
 from .types import Expert
 
-SHORTLIST = 4          # tools the model chooses from
+SHORTLIST = 6          # tools the model chooses from
 CLEAR_LEAD = 0.08      # embedding: a lead this big over the runner-up and the closest tool is taken without asking the model
 EXAMPLES = 5
 
@@ -67,15 +71,39 @@ def _props(tool: dict[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], tool.get("input_schema", {}).get("properties") or {})
 
 
+# an example a small model wrote that is no request a person would type: the prompt echoed back, an instruction to the
+# user, or code (the tool's name, snake_case words, {braces}, <placeholders>, key=value, -flags). Such examples share words
+# like "list" and "repo" with every message and pull routing to the wrong tool, so they are skipped.
+_NOT_A_REQUEST = re.compile(r"^\s*(what the tool does|it needs|it can be told|i would type|enter|input|specify|choose|please specify|give me the name)\b"
+                            r"|[{}<>=]|\b[a-z]+_[a-z_]+\b|(^|\s)--?[a-z]", re.I)
+
+
+def usable_example(text: str, tool: dict[str, Any]) -> bool:
+    return 0 < len(text.split()) <= 25 and tool["name"].lower() not in text.lower() and not _NOT_A_REQUEST.search(text)
+
+
 def tool_expert(tool: dict[str, Any]) -> Expert:
     """A tool in the shape the extractors and engines take."""
+    examples = [x for x in dict.fromkeys(tool.get("examples", [])) if usable_example(x, tool)]
     return Expert(name=tool["name"], description=tool.get("description") or tool.get("title") or tool["name"],
-                  examples=tool.get("examples", []), parameters=tool.get("input_schema") or {"type": "object", "properties": {}},
+                  examples=examples, parameters=tool.get("input_schema") or {"type": "object", "properties": {}},
                   model={}, license="")
 
 
-def shortlist(message: str, tools: list[dict[str, Any]], k: int = SHORTLIST) -> list[tuple[float, dict[str, Any]]]:
-    """The k tools closest to the message, closest first, with their scores."""
+def _without(message: str, name: str) -> str:
+    """The message without the expert's name ("notes: show my notes" → "show my notes"): every tool of the server is about
+    the same thing, so the name says nothing about which tool and only adds noise."""
+    words = [w for w in re.split(r"[_\s-]+", name) if w]
+    rest = re.sub(r"\b" + r"[\s_-]*".join(map(re.escape, words)) + r"\b", " ", message, flags=re.I) if words else message
+    rest = re.sub(r"\s+", " ", rest).strip(" ,:;")
+    return rest or message
+
+
+def shortlist(message: str, tools: list[dict[str, Any]], k: int = SHORTLIST, server: str = "") -> list[tuple[float, dict[str, Any]]]:
+    """The k tools closest to the message, closest first, with their scores. `server`: the expert's name, left out of the
+    message."""
+    if server:
+        message = _without(message, server)
     if embedder.AVAILABLE:
         q = embedder.embed([message])[0]
         scored = [(float((embedder.embed(tool_expert(t).routing_texts) @ q).max()), t) for t in tools]
@@ -95,11 +123,39 @@ def _fill(message: str, tool: dict[str, Any], model: str, base_url: str) -> dict
     return OpenAICompatExtractor(base_url, model, timeout=90, fallback=False).extract(message, loose)
 
 
+CHOOSE_PROMPT = 'Pick the one tool that does what the user asks. Reply with JSON {"tool": "<name>"}.\nTools:\n'
+
+
+def _choose(message: str, ranked: list[tuple[float, dict[str, Any]]], model: str, base_url: str) -> dict[str, Any] | None:
+    """The tool the model names among the shortlist (structured output: its answer can only be one of their names), or None."""
+    names = [t["name"] for _, t in ranked]
+    tools = "\n".join(f"- {t['name']}: {(t.get('description') or t.get('title') or '')[:200]}" for _, t in ranked)
+    body = {"model": model, "temperature": 0, "max_tokens": 60, "messages": [
+        {"role": "system", "content": CHOOSE_PROMPT + tools}, {"role": "user", "content": message}],
+        "response_format": {"type": "json_schema", "json_schema": {"name": "pick", "strict": True, "schema": {
+            "type": "object", "properties": {"tool": {"type": "string", "enum": names}}, "required": ["tool"]}}}}
+    try:
+        text = re.sub(r"<think>.*?</think>", "", chat(base_url, body, 60)["choices"][0]["message"]["content"] or "", flags=re.S)
+        name = json.loads(text[text.find("{"):text.rfind("}") + 1])["tool"]
+    except LLMError as e:
+        if e.fatal:
+            raise
+        return None
+    except (ValueError, KeyError, TypeError):
+        return None
+    return next((t for _, t in ranked if t["name"] == name), None)
+
+
 def pick(message: str, ranked: list[tuple[float, dict[str, Any]]], model: str, base_url: str,
-         choose: bool = False) -> tuple[dict[str, Any], dict[str, Any], str]:
-    """(tool, arguments, how it was chosen)."""
+         choose: bool = False, server: str = "") -> tuple[dict[str, Any], dict[str, Any], str]:
+    """(tool, arguments, how it was chosen). Unless the closest tool is clearly ahead, the model names one of the shortlist
+    (`_choose`); with `choose` it instead calls one by tool calling, which fills the arguments in the same step."""
     top = ranked[0][1]
     clear = len(ranked) == 1 or ranked[0][0] - ranked[1][0] >= CLEAR_LEAD
+    if model and not clear and not choose:
+        chosen = _choose(_without(message, server) if server else message, ranked, model, base_url)
+        if chosen:
+            return chosen, _fill(message, chosen, model, base_url), f"chosen by {model}"
     if choose and model and not clear:
         options = {t["name"]: tool_expert(t) for _, t in ranked}
         try:
@@ -148,6 +204,18 @@ def ground(args: dict[str, Any], tool: dict[str, Any], message: str, defaults: d
     return {k: v for k, v in out.items() if k in props or not props}
 
 
+# a value a model writes when it has nothing to go on: "your_username", "user:your-name", "<owner>", "{repo}", "example-repo", "owner"
+_PLACEHOLDER = re.compile(r"\byour[_-]|^\s*(your|my)\s|[<{]|\bexample\b|\bplaceholder\b|^\s*(owner|repo|repository|user|username|name|"
+                          r"string|value|id|path|xxx+)\s*$", re.I)
+
+
+def missing(args: dict[str, Any], tool: dict[str, Any], message: str, defaults: dict[str, Any]) -> list[str]:
+    """Required arguments the message did not give, for which the model wrote a placeholder (or nothing) and there is no default."""
+    text = message.lower()
+    return [k for k in tool.get("input_schema", {}).get("required", [])
+            if k not in defaults and (k not in args or isinstance(args[k], str) and not _said(args[k], text) and _PLACEHOLDER.search(args[k]))]
+
+
 def model_for(expert: Expert, extractor: ArgExtractor) -> str:
     return str(expert.model.get("id") or (getattr(extractor, "model", "") if extractor.name == "openai_compat" else ""))
 
@@ -156,9 +224,20 @@ def run(expert: Expert, message: str, extractor: ArgExtractor, llm_url: str) -> 
     """{text, files, args, label, confirm?, error?} for one message."""
     if not expert.tools:
         raise mcp_client.McpError(f"{expert.name} has no tools. Refresh its tools on the Experts page.")
-    ranked = shortlist(message, expert.tools)
+    ranked = shortlist(message, expert.tools, server=expert.name)
     model = model_for(expert, extractor)
-    tool, args, how = pick(message, ranked, model, llm_url, choose=bool(expert.model.get("choose_tool")))
+    tool, args, how = pick(message, ranked, model, llm_url, choose=bool(expert.model.get("choose_tool")), server=expert.name)
+    gaps = missing(args, tool, message, expert.defaults) if model else []
+    if gaps and tool is not ranked[0][1]:   # the model's pick needs what the message does not say: the closest tool may not
+        closest = ranked[0][1]
+        alt = _fill(message, closest, model, llm_url)
+        alt_gaps = missing(alt, closest, message, expert.defaults)
+        if len(alt_gaps) < len(gaps):   # none: it runs; fewer: it is the one to ask about
+            tool, args, how, gaps = closest, alt, f"closest tool, arguments by {model}", alt_gaps
+    if gaps:   # calling with "your_username" only gets a 404 back: say what is missing instead
+        names = " and ".join(f"**{k}**" + (f" (the model wrote “{args[k]}”)" if isinstance(args.get(k), str) and args[k] else "") for k in gaps)
+        raise mcp_client.McpError(f"{tool['name']} needs {names}, and the message does not say. Say it in the message, "
+                                  f"or set a default in this expert's settings (Default arguments, e.g. `{gaps[0]}: …`).")
     args = ground(args, tool, message, expert.defaults)
     try:
         validate_args(args, tool.get("input_schema", {}))
@@ -182,9 +261,11 @@ def call(expert: Expert, tool: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---- adding a server: its tools, with examples to route by ----
-EXAMPLE_PROMPT = ("You write example messages for a tool, so a router can tell when a user wants it. Reply with JSON: "
-                  '{"examples": ["...", "..."]}. Write ' + str(EXAMPLES) + " short, varied messages a person would type to get "
-                  "this done, in plain words, with concrete values. Do not name the tool.")
+# Only what the tool does and the names of its arguments: shown the argument schema, small models write command lines.
+EXAMPLE_PROMPT = ("You write example chat messages for a tool, so a router can tell when a user wants it. Reply with JSON: "
+                  '{"examples": ["...", "..."]}. Write ' + str(EXAMPLES) + " short messages, each a different request a person "
+                  "would type to an assistant in everyday words, with concrete values (for a weather tool: \"will it rain in "
+                  "Paris tomorrow?\"). Never write the tool's name, code, flags or argument names.")
 
 
 def _examples_for(tool: dict[str, Any], model: str, base_url: str) -> list[str]:
@@ -195,17 +276,20 @@ def _examples_for(tool: dict[str, Any], model: str, base_url: str) -> list[str]:
 
 
 def _ask_examples(tool: dict[str, Any], model: str, base_url: str) -> list[str]:
-    props = {k: v.get("description", v.get("type", "")) for k, v in _props(tool).items()}
+    needs = ", ".join(k.replace("_", " ") for k in _props(tool)) or "nothing"
     body = {"model": model, "temperature": 0.7, "max_tokens": 400, "messages": [
         {"role": "system", "content": EXAMPLE_PROMPT},
-        {"role": "user", "content": f"Tool: {tool['name']}\nWhat it does: {tool.get('description') or tool.get('title') or '(no description)'}\n"
-                                    f"Arguments: {json.dumps(props, ensure_ascii=False)}"}],
+        {"role": "user", "content": f"What the tool does: {tool.get('description') or tool.get('title') or tool['name'].replace('_', ' ')}\n"
+                                    f"It can be told: {needs}"}],
         "response_format": {"type": "json_schema", "json_schema": {"name": "examples", "strict": True, "schema": {
             "type": "object", "properties": {"examples": {"type": "array", "items": {"type": "string"}}}, "required": ["examples"]}}}}
     text = chat(base_url, body, 120)["choices"][0]["message"]["content"] or ""
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
     items = json.loads(text[text.find("{"):text.rfind("}") + 1])["examples"]
-    return [str(x).strip() for x in items if isinstance(x, str) and 0 < len(x.strip()) <= 200][:EXAMPLES + 1]
+    out = [x.strip() for x in dict.fromkeys(items) if isinstance(x, str) and len(x.strip()) <= 200 and usable_example(x, tool)]
+    if not out:
+        raise ValueError("the model wrote no usable examples")
+    return out[:EXAMPLES + 1]
 
 
 def write_examples(tools: list[dict[str, Any]], model: str, base_url: str, keep: list[dict[str, Any]] | None = None) -> list[str]:

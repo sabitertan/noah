@@ -507,11 +507,14 @@ option limit only ever see one entry per server. What happens to a message:
 1. **Routing (Noah, unchanged).** The decision engine compares the message with every expert. An MCP expert brings every
    tool's description and examples, so "write a file todo.txt" reaches the filesystem server because it is close to
    `write_file`'s examples.
-2. **Choosing the tool (the expert).** The closest tool by the same embeddings wins (keyword overlap without them).
-   The expert's model then fills that tool's arguments with structured output, which any model can do.
+2. **Choosing the tool (the expert).** The message, without the expert's name ("github list my repos" → "list my repos"),
+   is compared with each tool by the same embeddings (keyword overlap without them). When one tool is clearly closest, it
+   wins; otherwise the expert's model names one of the six closest (structured output, which any model can do). The model
+   then fills that tool's arguments, also with structured output.
 3. **Grounding the arguments.** A value that is not in the message was made up by the model: an optional one is dropped,
    and a required one takes the expert's **default** if it has one (`path: D:/notes`, `owner: my-org`; set under
-   **Default arguments** in its settings).
+   **Default arguments** in its settings). A required one that is still a placeholder (`your_username`) is not sent: the
+   reply says which argument to give.
 4. **Asking first.** A tool not marked read-only by its server shows its arguments with **Run**, **Always allow** and
    **Cancel** in the chat, and runs only then. Read-only tools run right away.
 
@@ -520,11 +523,14 @@ shown like any file.
 
 When a server is added, the model you choose writes about five example requests per tool. They're kept in
 `experts/<name>/tools.json`, which you can edit under **Files**. **Refresh tools** asks the server again: unchanged tools keep
-their examples, and only new or changed ones get new ones. Without a model, tools are matched by their descriptions only.
+their examples, and only new or changed ones get new ones; **Rewrite examples** has the model write them all again.
+Examples that are no request a person would type (code like `list_releases owner/repo`, the prompt echoed back) are skipped
+when routing; small models write many of those, so a 1.5B or larger model writes better ones. Without a model, tools are
+matched by their descriptions only.
 
-- **Embeddings choose, by default.** On the reference filesystem server, the closest tool by embeddings was right 8 times
-  in 10, qwen2.5 0.5B choosing from the four closest 6 times, and qwen2.5-coder 1.5B never (Ollama gives it no tool calling).
-  For a model that is good at tool calling (large or hosted), tick **Let the model choose among the closest tools**.
+- **Embeddings shortlist, the model picks.** On GitHub's 46 tools and ten everyday requests, the closest tool by embeddings
+  alone was right 4 to 6 times; qwen2.5 0.5B or qwen2.5-coder 1.5B naming one of the six closest, 10 times. For a model
+  that is good at tool calling (large or hosted), tick **Use tool calling to pick and fill in one step**.
 - **Secrets.** `${NAME}` in any value is read from the environment variable `NAME`, so tokens can stay out of `expert.yaml`.
   The UI shows a server's address or command, never its headers or env.
 - **Permission.** A local server (`command`) is a program Noah starts, so adding one, or changing `server:` in the editor,

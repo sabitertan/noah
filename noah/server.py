@@ -404,6 +404,7 @@ class McpAdd(BaseModel):
 
 class McpRefresh(BaseModel):
     model: str = Field(default="", max_length=200)
+    rewrite: bool = False   # write every tool's examples again, not only those of new or changed tools
 
 
 class McpRun(BaseModel):
@@ -464,7 +465,7 @@ def add_mcp_servers(body: McpAdd, request: Request):
 
 @app.post("/api/mcp/{name}/refresh")
 def refresh_mcp_tools(name: str, body: McpRefresh):
-    """List the server's tools again. Unchanged tools keep their examples; new or changed ones get new ones."""
+    """List the server's tools again. Unchanged tools keep their examples (unless `rewrite`); new or changed ones get new ones."""
     _mcp_ready()
     e = _mcp_expert(name)
     mcp_client.disconnect(e.server)   # reconnect, so a server that was updated or restarted is seen as it is now
@@ -478,7 +479,7 @@ def refresh_mcp_tools(name: str, body: McpRefresh):
     except mcp_client.McpError as err:
         raise HTTPException(502, str(err))
     model = body.model or str(e.model.get("id", ""))
-    problems = mcp_expert.write_examples(tools, model, f"{OLLAMA}/v1", keep=e.tools)
+    problems = mcp_expert.write_examples(tools, model, f"{OLLAMA}/v1", keep=None if body.rewrite else e.tools)
     _editor(lambda: expert_files.baseline(VERSIONS, EXPERTS_DIR, name))
     expert_store.write_tools(EXPERTS_DIR, name, tools)
     expert_store.set_routing(EXPERTS_DIR, name, *mcp_expert.routing(name, tools))

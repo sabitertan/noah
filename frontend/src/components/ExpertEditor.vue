@@ -102,10 +102,10 @@ async function doSignOut() {
   await signOut(card.value); await refreshConfig(); auth.tick++; auth.note = 'Signed out: the tokens were deleted.';
 }
 
-async function refreshTools() {
+async function refreshTools(rewrite = false) {
   mcp.refreshing = true; mcp.note = '';
   try {
-    const r = await send(`/api/mcp/${encodeURIComponent(props.name)}/refresh`, 'POST', { model: form.model });
+    const r = await send(`/api/mcp/${encodeURIComponent(props.name)}/refresh`, 'POST', { model: form.model, rewrite });
     const j = await r.json();
     if (!r.ok) throw new Error(explain(j.detail));
     mcp.note = `${j.tools} tools, ${j.with_examples} with examples.` + (j.problems.length ? ' No examples for: ' + j.problems.join('; ') : '');
@@ -131,7 +131,7 @@ async function refreshTools() {
       </template>
     <template v-else>
       <p v-if="isNew" class="lede">A <b>generate</b> expert is a small model with a job: you describe it, give example messages so Noah can route to it, and write the prompt that makes the model do that one thing.</p>
-      <p v-if="isMcp" class="lede" id="e-mcpnote">This expert is an MCP server (<code>{{ mcp.server }}</code>). Noah routes a message here when it is close to any of its tools; the expert then takes the closest tool, and its model fills that tool's arguments from the message (and the defaults below). Tools not marked read-only ask before they run.</p>
+      <p v-if="isMcp" class="lede" id="e-mcpnote">This expert is an MCP server (<code>{{ mcp.server }}</code>). Noah routes a message here when it is close to any of its tools; the expert's model then picks one of the closest tools and fills its arguments from the message (and the defaults below). Tools not marked read-only ask before they run.</p>
       <p v-if="isTool" class="lede" id="e-toolnote">This expert runs Python code (<code>experts/{{ name }}/tool.py</code>): change it in the <b>Files</b> tab. Here you can change how Noah routes messages to it.</p>
 
       <div class="form wide">
@@ -151,9 +151,9 @@ async function refreshTools() {
           <label>Model</label>
           <div><select id="e-model" v-model="form.model"><option value="">The orchestrator's tiny model</option>
             <optgroup v-for="g in groups" :key="g.label" :label="g.label"><option v-for="m in g.models" :key="m">{{ m }}</option></optgroup></select>
-            <div class="fnote">Fills the arguments of the tool Noah picked (the closest to the message); also writes examples for new tools.</div>
-            <label class="choice"><input type="checkbox" id="e-choose" v-model="form.choose_tool"> Let the model choose among the closest tools</label>
-            <div class="fnote">For models that are good at tool calling (large or hosted ones). Small local models choose worse than the closest match.</div></div>
+            <div class="fnote">Picks among the tools closest to the message (unless one is clearly closest), fills the tool's arguments, and writes examples for new tools.</div>
+            <label class="choice"><input type="checkbox" id="e-choose" v-model="form.choose_tool"> Use tool calling to pick and fill in one step</label>
+            <div class="fnote">For models that are good at tool calling (large or hosted ones). Small local models do better without it.</div></div>
 
           <template v-if="card?.oauth || isSignedIn">
             <label>Sign-in</label>
@@ -174,9 +174,12 @@ async function refreshTools() {
           <div id="e-tools">
             <details v-for="t in mcp.tools" :key="t.name" class="mcptool"><summary><code>{{ t.name }}</code> <span class="tag" :class="t.read_only ? 'ro' : 'rw'">{{ t.read_only ? 'read-only' : 'asks first' }}</span> <span class="meta">{{ t.description }}</span></summary>
               <div v-for="x in t.examples" :key="x" class="fnote">“{{ x }}”</div><div v-if="!t.examples.length" class="fnote warn">No examples: routed by its description only.</div></details>
-            <div class="hfrow"><button class="btn small" id="e-refresh" :disabled="mcp.refreshing" @click="refreshTools">{{ mcp.refreshing ? 'Refreshing…' : 'Refresh tools' }}</button>
+            <div class="hfrow"><button class="btn small" id="e-refresh" :disabled="mcp.refreshing" @click="refreshTools(false)">{{ mcp.refreshing ? 'Refreshing…' : 'Refresh tools' }}</button>
+              <button class="btn small" id="e-rewrite" :disabled="mcp.refreshing || !form.model" title="Needs a model (above)" @click="refreshTools(true)">Rewrite examples</button>
               <span v-if="mcp.note" class="fnote">{{ mcp.note }}</span></div>
-            <div class="fnote">Asks the server for its tools again. Tools that did not change keep their examples (edit them in <code>tools.json</code> under Files).</div>
+            <div class="fnote">Refresh asks the server for its tools again; tools that did not change keep their examples. Rewrite has the model above
+              write every tool's examples again: do it when they look wrong (a small model writes poor ones; 1.5B or larger does better).
+              Edit them by hand in <code>tools.json</code> under Files.</div>
           </div>
         </template>
         <template v-if="!isTool && !isMcp">
