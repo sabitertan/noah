@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -9,7 +11,7 @@ from .types import Expert
 
 
 def _load_one(manifest_path: Path) -> Expert:
-    manifest = yaml.safe_load(manifest_path.read_text())
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     kind = manifest.get("kind", "tool")
     module = None
     if kind == "tool":
@@ -19,6 +21,10 @@ def _load_one(manifest_path: Path) -> Expert:
             raise ImportError(f"cannot load {tool_path}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+    tools: list[dict[str, Any]] = []
+    if kind == "mcp":  # the server's tools, listed when it was added or refreshed (with their routing examples)
+        tools_path = manifest_path.parent / "tools.json"
+        tools = json.loads(tools_path.read_text(encoding="utf-8")) if tools_path.is_file() else []
     return Expert(
         name=manifest["name"],
         description=manifest["description"],
@@ -32,6 +38,9 @@ def _load_one(manifest_path: Path) -> Expert:
         system=manifest.get("system", ""),
         shots=manifest.get("shots", []),
         strip=manifest.get("strip", []),
+        server=manifest.get("server", {}),
+        defaults=manifest.get("defaults") or {},
+        tools=tools,
     )
 
 

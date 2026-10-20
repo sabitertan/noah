@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 from typing import Any, cast
 
+import yaml
+
 from . import expert_check
 from .expert_store import ExpertError, _dir  # pyright: ignore[reportPrivateUsage]  (one definition of a valid expert folder)
 
@@ -61,8 +63,17 @@ def digest(files: dict[str, str]) -> str:
 
 
 def code_changed(before: dict[str, str], after: dict[str, str]) -> bool:
+    """Python changed, or the MCP server an expert starts (`server:` in expert.yaml can name any program to run)."""
     py = {n for n in (*before, *after) if n.endswith(".py")}
-    return any(before.get(n) != after.get(n) for n in py)
+    return any(before.get(n) != after.get(n) for n in py) or _server(before) != _server(after)
+
+
+def _server(files: dict[str, str]) -> Any:
+    try:
+        m: Any = yaml.safe_load(files.get("expert.yaml", "")) or {}
+    except yaml.YAMLError:
+        return files.get("expert.yaml")   # unreadable: compare the text, so any edit counts
+    return cast(dict[str, Any], m).get("server") if isinstance(m, dict) else None
 
 
 def _shape(files: dict[str, str]) -> None:

@@ -27,5 +27,6 @@ PyInstaller.__main__.run([
     "--paths", str(root),
     "--add-data", f"{root / 'noah' / 'web'}{os.pathsep}noah/web",
     "--collect-all", "agent_framework", "--collect-all", "agent_framework_orchestrations", "--collect-all", "fastembed",
-    "--collect-submodules", "uvicorn", "--collect-submodules", "onnxruntime", "--hidden-import", "noah.server",
+    "--collect-submodules", "uvicorn", "--collect-submodules", "onnxruntime",
+    "--collect-submodules", "mcp", "--collect-submodules", "mcp_types", "--hidden-import", "noah.server",
 ])

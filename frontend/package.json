@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.85",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "monaco-editor": "0.57.0",
     "vue": "^3.5.44"
   },

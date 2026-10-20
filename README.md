@@ -6,9 +6,9 @@
 
 Layered tiny-model orchestration. You pick a **decision engine** and an **orchestrator**; each job goes to a
 small **expert** (a tiny model, a tool, or both). Every decision is traced, so you can later fine-tune your own.
-Models can run locally (Ollama) or hosted by Hugging Face, OpenRouter or your own Azure Foundry resource, chosen per model. There is a web UI, a desktop app and a CLI.
+Models can run locally (Ollama), hosted by Hugging Face, OpenRouter or your own Azure Foundry resource, or inside the web page itself (WebLLM, on your GPU), chosen per model. There is a web UI, a desktop app and a CLI.
 
-**Demo:** [sabitertan.github.io/noah](https://sabitertan.github.io/noah/) runs Noah entirely in your browser; connect your own [Ollama](https://ollama.com/download) for local models.
+**Demo:** [sabitertan.github.io/noah](https://sabitertan.github.io/noah/) runs Noah entirely in your browser; connect your own [Ollama](https://ollama.com/download) for local models, or download a small model into the page (Models > WebLLM) and need nothing else.
 
 ```
 message -> [decision engine] -> [orchestrator: Microsoft Agent Framework workflow] -> [expert(s)] -> answer
@@ -31,7 +31,7 @@ Files expert: open a file right in the chat, or get download / open-with-app opt
 |---|---|
 | ![C# expert answering with a code block](docs/code.png) | ![Orchestrators page with a profile editor](docs/orchestrators.png) |
 
-Models page, tab **My models**: every model is labelled by where it runs: local (Ollama), or hosted by Hugging Face, OpenRouter or Azure Foundry. Each provider has its own tab.
+Models page, tab **My models**: every model is labelled by where it runs: local (Ollama), hosted by Hugging Face, OpenRouter or Azure Foundry, or in this browser (WebLLM). Each provider has its own tab.
 
 ![Models page listing local models and hosted ones from Hugging Face and OpenRouter, each labelled with where it runs](docs/models.png)
 
@@ -55,8 +55,8 @@ Regenerate them against a running server with `python scripts/readme_shots.py` (
 |---|---|---|
 | Chat | Ask anything; pick an orchestrator and Route / Fan-out; open "routing decision" to see every expert's score; file results open in place | `#/chat`, `#/chat/<id>` |
 | Orchestrators | Cards for saved profiles with an on/off switch each; the editor below changes a draft that the selected card shows live ("unsaved") until you Save | `#/orch` |
-| Experts | Every expert with its examples and an on/off switch; select one for its settings or all its files in a code editor, with checks before saving and versions | `#/experts`, `#/experts/<name>` |
-| Models | Tabs: **My models** (every model and where it runs), **Hugging Face** (hosted or GGUF download), **OpenRouter** and **Azure Foundry** (hosted) | `#/models`, `#/models/hf`, `#/models/or`, `#/models/az` |
+| Experts | Every expert with its examples and an on/off switch; select one for its settings or all its files in a code editor, with checks before saving and versions; **Add MCP server** turns an MCP server into an expert | `#/experts`, `#/experts/<name>` |
+| Models | Tabs: **My models** (every model and where it runs), **Hugging Face** (hosted or GGUF download), **OpenRouter** and **Azure Foundry** (hosted), **WebLLM** (download a small model into the browser and try it) | `#/models`, `#/models/hf`, `#/models/or`, `#/models/az`, `#/models/web` |
 | Traces | Every routing decision, the raw material for fine-tuning | `#/traces` |
 
 The sidebar shows how many orchestrators and experts are enabled (for example `5/7`). The page is kept in the URL, so a
@@ -146,8 +146,10 @@ npm run build:wasm    # the static site in site/ (with noah-py.zip: noah/ and ex
 Actions). The first visit downloads about 15 MB (Python and its packages, from the jsDelivr CDN), then it is cached; Python
 starts in about 5 s.
 
-**Models still run in Ollama on the visitor's computer.** The page says so and walks them through it (Models page): install
-Ollama, let the page use it, pull the models, press Connect. The address is a setting (default `http://localhost:11434`).
+**Models run in Ollama on the visitor's computer, or in the page itself.** For Ollama, the page walks them through it
+(Models page): install Ollama, let the page use it, pull the models, press Connect. The address is a setting (default
+`http://localhost:11434`). Without Ollama, a small model can be downloaded into the browser on the **WebLLM** tab and used
+like any other ([below](#models-in-the-browser-webllm)).
 
 - Ollama only answers web pages it trusts, so the visitor sets `OLLAMA_ORIGINS` to the site's address (for example
   `https://<user>.github.io`) and restarts Ollama. Pages on localhost need nothing.
@@ -159,6 +161,28 @@ What is different from the server: the embedding decision engine needs the ONNX 
 here, so the Default orchestrator routes by keywords. The `files` and `image` experts need programs on the computer (a files
 folder, an image server) and start switched off. The expert check loads a draft in the page itself (there are no processes),
 and Python can be edited freely: it only ever runs in the visitor's own tab.
+
+### Models in the browser (WebLLM)
+
+The **WebLLM** tab on the Models page downloads a small model from [WebLLM](https://github.com/mlc-ai/web-llm)'s catalogue
+(Qwen2.5 0.5B/1.5B, Qwen2.5-Coder 1.5B, Qwen3 0.6B, Llama 3.2 1B, Gemma 3 1B, SmolLM2, …; **Show all** lists every one, smallest
+first, with the GPU memory it needs) into the browser's cache and runs it on the GPU with WebGPU, in a worker so the page stays
+responsive. Press **Download** once (a few hundred MB to about 1 GB per model), then **Load** on later visits; a **Try** box below
+chats with the loaded model and shows tokens per second. Nothing is sent anywhere: no key, no Ollama, no server.
+
+In the browser build, every downloaded model also appears in every model dropdown as `web:<model id>` (group "In this browser
+(WebLLM)"), so orchestrators, the argument extractor and generate experts can use it:
+
+- Noah's Python waits for the page's answer with Pyodide's `run_sync`, which needs WebAssembly JSPI: a recent Chrome or Edge.
+  Elsewhere the tab says so and models can still be tried there.
+- WebLLM only has tool calling for a few 8B models, so for every model Noah emulates it: the answer is constrained to JSON that
+  matches the tools' schemas and turned back into tool calls (`frontend/src/lib/webllm-openai.js`). `llm_tools` and the extractor
+  work on any of them.
+- `llm_choice` gets at most 5 token log-probabilities (the engine asks for 20), so with many experts the less likely ones score 0.
+- One model is on the GPU at a time; the first call after switching loads it (a few seconds, from the cache, never a download).
+  Calling a model that is not downloaded says so instead of starting a download.
+- The server, Docker and desktop builds show the tab for trying models only: their Python cannot reach the browser's GPU, and a
+  `web:` model there fails with an error that says so.
 
 ## Without containers
 
@@ -303,10 +327,10 @@ Laya is meant to be fine-tuned, and Noah's traces can serve as the training data
 Check each model's license before use: a third-party listing says Nemotron-Orchestrator-8B is research-only, and
 FunctionGemma is under the Gemma terms.
 
-## Hosted and local models (Hugging Face, OpenRouter, Azure Foundry, Ollama)
+## Hosted and local models (Hugging Face, OpenRouter, Azure Foundry, Ollama, WebLLM)
 
 Every place that takes a model (orchestrator model, tiny argument model, generate experts) accepts any kind, and
-the **Models** page shows which is which ("Local · Ollama", "Hugging Face · hosted", "OpenRouter · hosted" or "Azure Foundry · hosted"):
+the **Models** page shows which is which ("Local · Ollama", "Hugging Face · hosted", "OpenRouter · hosted", "Azure Foundry · hosted" or "This browser · WebLLM"):
 
 | | Where it runs | Needs | Name |
 |---|---|---|---|
@@ -314,6 +338,7 @@ the **Models** page shows which is which ("Local · Ollama", "Hugging Face · ho
 | **Hugging Face hosted** | Hugging Face Inference Providers, through their API. Nothing is downloaded. | a token | `hf:Qwen/Qwen2.5-7B-Instruct` |
 | **OpenRouter hosted** | OpenRouter, through its API (it has nothing to download). | an API key | `or:meta-llama/llama-3.3-70b-instruct:free` |
 | **Azure Foundry hosted** | A deployment on your own Azure resource, through its OpenAI-compatible v1 route. | an endpoint and an API key or `az login` | `az:my-gpt-4o-mini` (your deployment name) |
+| **In this browser** | The visitor's GPU, inside the page ([WebLLM](#models-in-the-browser-webllm)). Browser build only. | a download into the browser, WebGPU | `web:Qwen2.5-0.5B-Instruct-q4f16_1-MLC` |
 
 On **Models**, each provider has its own tab. Hugging Face and OpenRouter: paste your key, search, and press **Use hosted**.
 The model then appears in every model dropdown (grouped by where it runs) and gets a **Test** button. Searching shows what
@@ -464,8 +489,84 @@ license: Apache-2.0
 Good `description` and `examples` matter most: the decision engine routes on them.
 Note each expert's model license (the manifest has a `license` field); some small models are non-commercial.
 
+## MCP servers as experts
+
+Any [MCP](https://modelcontextprotocol.io) server can be added as an expert: local and remote ones in the server and
+desktop builds, remote ones in the browser build ([below](#mcp-in-the-browser-build)). On **Experts**, press
+**Add MCP server** and paste the configuration you already use in Claude Desktop, VS Code or Cursor:
+
+```json
+{ "mcpServers": {
+    "files": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "D:/notes"] },
+    "github": { "url": "https://api.githubcopilot.com/mcp/", "headers": { "Authorization": "Bearer ${GITHUB_TOKEN}" } } } }
+```
+
+Each server becomes **one expert**, however many tools it has, so the expert list, the LLM orchestrators and `llm_choice`'s
+option limit only ever see one entry per server. What happens to a message:
+
+1. **Routing (Noah, unchanged).** The decision engine compares the message with every expert. An MCP expert brings every
+   tool's description and examples, so "write a file todo.txt" reaches the filesystem server because it is close to
+   `write_file`'s examples.
+2. **Choosing the tool (the expert).** The closest tool by the same embeddings wins (keyword overlap without them).
+   The expert's model then fills that tool's arguments with structured output, which any model can do.
+3. **Grounding the arguments.** A value that is not in the message was made up by the model: an optional one is dropped,
+   and a required one takes the expert's **default** if it has one (`path: D:/notes`, `owner: my-org`; set under
+   **Default arguments** in its settings).
+4. **Asking first.** A tool not marked read-only by its server shows its arguments with **Run**, **Always allow** and
+   **Cancel** in the chat, and runs only then. Read-only tools run right away.
+
+Results: text goes into the reply; images and binary resources are saved under the files folder (`data/files/mcp/`) and
+shown like any file.
+
+When a server is added, the model you choose writes about five example requests per tool. They're kept in
+`experts/<name>/tools.json`, which you can edit under **Files**. **Refresh tools** asks the server again: unchanged tools keep
+their examples, and only new or changed ones get new ones. Without a model, tools are matched by their descriptions only.
+
+- **Embeddings choose, by default.** On the reference filesystem server, the closest tool by embeddings was right 8 times
+  in 10, qwen2.5 0.5B choosing from the four closest 6 times, and qwen2.5-coder 1.5B never (Ollama gives it no tool calling).
+  For a model that is good at tool calling (large or hosted), tick **Let the model choose among the closest tools**.
+- **Secrets.** `${NAME}` in any value is read from the environment variable `NAME`, so tokens can stay out of `expert.yaml`.
+  The UI shows a server's address or command, never its headers or env.
+- **Permission.** A local server (`command`) is a program Noah starts, so adding one, or changing `server:` in the editor,
+  needs the same permission as editing Python: by default only from the computer running Noah (`NOAH_CODE_EDIT`).
+- **Connections** are kept open: a local server is started once and stopped after 10 idle minutes (`NOAH_MCP_IDLE`).
+  Remote servers use Streamable HTTP; the older SSE transport is not supported.
+- **Docker.** Local servers need their runtime (Node for `npx`, uv for `uvx`) inside the image.
+
+### Signing in (OAuth)
+
+A remote server that asks for sign-in is added right away, without tools, and shows **Sign in** (in the add results, in its
+settings, and as a "sign in" tag on its card). Pressing it opens the server's sign-in page in a small window; when you come
+back, Noah lists the tools (and writes their examples). Noah uses the MCP SDKs' OAuth: it discovers the server's
+authorization server, registers itself there (dynamic client registration), signs in with PKCE, and refreshes tokens when
+they run out, so you sign in once. **Sign out** deletes the tokens.
+
+- **Where tokens live.** Server and desktop: `data/mcp_oauth/` (owner-only files), never sent to the browser. Browser build:
+  that browser's storage.
+- **Callback.** Server and desktop: `/api/mcp/oauth/callback` on Noah's own address (it works without the desktop app's
+  launch token, protected by the sign-in's one-time state). Browser build: `oauth-callback.html` next to the page.
+- **Never mid-chat.** A server that needs signing in while Noah answers says so ("press Sign in") instead of opening a window.
+- **A token by hand wins.** With an `Authorization` header in the configuration, Noah sends that and does not sign in.
+
+### MCP in the browser build
+
+Noah's Python runs in a worker with no sockets or threads there, so the page is the MCP client: the official TypeScript SDK
+(`frontend/src/lib/mcp.js`) connects, signs in and calls tools, and Python waits for it the way it waits for `web:` models
+(Pyodide's `run_sync`, so a browser with WebAssembly JSPI: a recent Chrome or Edge).
+
+- **Remote servers only** (`url`): a web page cannot start programs, so a `command` server says it needs the server or
+  desktop version.
+- **CORS.** The server must allow the page's origin (and expose `Mcp-Session-Id`); one that does not is reported as
+  unreachable from the browser.
+- `${NAME}` has no environment variables to read in a browser: put a token in `headers` directly (it stays in that browser),
+  or let the server sign you in.
+
 ## Known limits
 
 - Small models make small mistakes (unused imports, mislabelled algorithms). Verify generated code.
 - Ambiguous prompts that span experts (HTML vs CSS) score nearly equal; use fan-out mode for those.
 - Chat history lives in the browser (localStorage), not on the server.
+- In-browser (WebLLM) models are small and pick or extract wrongly more often; prefer the 1.5B ones for real use.
+- MCP servers with near-duplicate tools (`read_file` / `read_text_file`, `list_directory` / `list_allowed_directories`)
+  are hard to tell apart by examples; edit their examples in `tools.json` to separate them. Small models may still fill
+  two related options from one number ("first 2 lines" → `head` and `tail`); the server then says so.

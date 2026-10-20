@@ -13,12 +13,16 @@ function splash() {
   }, done: () => el.remove() };
 }
 
-// Python (in the worker) calls a `web:` model: WebLLM runs here in the page (lib/webllm.js), so answer from it
-async function webModel({ id, body, ms }) {
+// Python (in the worker) needs what only the page has: a `web:` model (WebLLM, lib/webllm.js) or an MCP server (lib/mcp.js)
+const PAGE = {
+  llm: { load: () => import('../lib/webllm.js'), failed: 'The in-browser model failed' },
+  mcp: { load: () => import('../lib/mcp.js'), failed: 'The MCP client failed' },
+};
+async function forPython({ kind, id, body, ms }) {
   let reply;
-  try { reply = await (await import('../lib/webllm.js')).serve(body, ms); }
-  catch (e) { reply = JSON.stringify({ error: `The in-browser model failed: ${e.message || e}` }); }
-  worker.postMessage({ type: 'llm-reply', id, reply });
+  try { reply = await (await PAGE[kind].load()).serve(body, ms); }
+  catch (e) { reply = JSON.stringify({ error: `${PAGE[kind]?.failed || 'The page failed'}: ${e.message || e}` }); }
+  worker.postMessage({ type: 'page-reply', id, reply });
 }
 
 export function install() {
@@ -31,7 +35,7 @@ export function install() {
       if (data.type === 'status') screen.set(data.text);
       else if (data.type === 'ready') { screen.done(); resolve(); }
       else if (data.type === 'failed') { screen.fail(data.text); reject(new Error(data.text)); }
-      else if (data.type === 'llm') webModel(data);   // Python calls an in-browser model (web:<id>)
+      else if (data.type === 'page') forPython(data);   // Python calls an in-browser model or an MCP server
       else { pending.get(data.id)?.(data); pending.delete(data.id); }
     };
   });

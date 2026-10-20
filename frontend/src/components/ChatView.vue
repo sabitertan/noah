@@ -21,6 +21,19 @@ async function send() {
 const onEnter = e => { if (e.isComposing) return; e.preventDefault(); send(); };
 const ask = t => { text.value = t; send(); };
 
+// An MCP tool that may change something waits for the user (noah/mcp_expert.py): Run sends exactly the shown arguments
+async function runTool(r, always) {
+  r.running = true;
+  try {
+    const res = await fetch('/api/mcp/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...r.confirm, always }) });
+    const j = await res.json();
+    if (!res.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'could not run the tool');
+    Object.assign(r, { output: j.output, attachments: j.attachments, error: j.error, latency_ms: r.latency_ms + j.latency_ms, confirm: null });
+  } catch (e) { r.error = e.message; r.output += `\n\nCould not run it: ${e.message}`; }
+  delete r.running;
+}
+const cancelTool = r => { r.output = `Cancelled: **${r.confirm.tool}** did not run.`; r.confirm = null; };
+
 watch(() => [messages.value.length, messages.value.at(-1)?.pending, currentChat.value, view.value], () => {
   if (log.value) log.value.scrollTop = log.value.scrollHeight;
 }, { flush: 'post' });
@@ -44,6 +57,12 @@ defineExpose({ focus: () => box.value?.focus() });
           <div v-for="(r, j) in m.results" :key="j" class="a" :class="{ err: r.error }">
             <div class="head"><span class="badge">{{ r.expert }}</span><span>{{ r.extractor }} · {{ r.latency_ms.toFixed(0) }} ms</span></div>
             <div class="body" v-code v-html="fmt(r.output)"></div>
+            <div v-if="r.confirm" class="hfrow confirm" :data-confirm="r.confirm.tool">
+              <code class="args">{{ JSON.stringify(r.confirm.arguments) }}</code>
+              <button class="btn primary small" :disabled="r.running" @click="runTool(r, false)">{{ r.running ? 'Running…' : 'Run' }}</button>
+              <button class="btn small" :disabled="r.running" @click="runTool(r, true)" :title="`Run ${r.confirm.tool} without asking from now on`">Always allow</button>
+              <button class="btn small" :disabled="r.running" @click="cancelTool(r)">Cancel</button>
+            </div>
             <div v-if="r.attachments && r.attachments.length" class="files"><FileCard v-for="f in r.attachments" :key="f.path" :file="f" :local="cfg.local" /></div>
             <details><summary>arguments</summary><code>{{ JSON.stringify(r.args) }}</code><template v-if="r.error"><br><code>{{ r.error }}</code></template></details>
           </div>

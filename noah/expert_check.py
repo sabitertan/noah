@@ -83,8 +83,24 @@ def _manifest(m: Any, folder: str, files: dict[str, str], out: list[Problem]) ->
     if not _str_list(m, "examples") or not m["examples"]:
         out.append(problem(f, "examples must be a list of example messages (at least one)."))
     kind = m.get("kind", "tool")
-    if kind not in ("tool", "generate"):
-        out.append(problem(f, "kind must be 'tool' or 'generate'."))
+    if kind not in ("tool", "generate", "mcp"):
+        out.append(problem(f, "kind must be 'tool', 'generate' or 'mcp'."))
+    if kind == "mcp":
+        from .mcp_client import McpError, check_server
+        try:
+            check_server(m.get("server"))
+        except McpError as e:
+            out.append(problem(f, f"server: {e}"))
+        if "tools.json" not in files:
+            out.append(problem(f, "an mcp expert lists its tools in tools.json (refresh its tools to write it).", severity="warning"))
+        else:
+            try:
+                tools: Any = json.loads(files["tools.json"])
+            except ValueError:
+                tools = None   # reported for tools.json itself
+            if tools is not None and not (isinstance(tools, list) and all(isinstance(t, dict) and isinstance(cast(dict[str, Any], t).get("name"), str)
+                                                                         for t in cast(list[Any], tools))):
+                out.append(problem("tools.json", "tools.json must be a list of tools, each with a name."))
     model = m.get("model", {})
     if not isinstance(model, dict):
         out.append(problem(f, "model must be a mapping, e.g. {backend: rule}."))

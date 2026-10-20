@@ -10,6 +10,7 @@ from typing_extensions import Never
 
 from .engines.base import DecisionEngine
 from .generate import answer
+from . import mcp_client, mcp_expert
 from .extractors import ArgExtractor, validate_args
 from .trace import TraceStore
 from .types import Decision, Expert, ExpertResult, Routed
@@ -51,9 +52,15 @@ class ExpertNode(Executor):
         start, error, out = time.perf_counter(), None, ""
         args: dict[str, Any] = {}
         attachments: list[dict[str, Any]] = []
+        confirm: dict[str, Any] | None = None
         extractor = self.extractor.name
         try:
-            if self.expert.kind == "generate":
+            if self.expert.kind == "mcp":
+                # the expert picks one of its server's tools for the whole message, fills its arguments, and calls it (or asks first)
+                res = await asyncio.to_thread(mcp_expert.run, self.expert, routed.message, self.extractor, self.llm_url)
+                out, args, attachments, extractor, confirm = res["text"], res["args"], res["files"], res["label"], res.get("confirm")
+                error = res.get("error")
+            elif self.expert.kind == "generate":
                 # the expert's own small model answers directly; no argument extraction needed
                 model = self.expert.model["id"]
                 extractor = f"generate:{model}"
@@ -73,11 +80,13 @@ class ExpertNode(Executor):
                     out, attachments = rich.get("text", ""), rich.get("files", [])
                 else:
                     out = result
+        except mcp_client.McpError as e:   # already in plain words (sign in, server unreachable, …)
+            error = out = str(e)
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
             out = f"Expert '{self.expert.name}' failed: {error}"
         await ctx.yield_output(ExpertResult(self.expert.name, args, out, extractor,
-                                            (time.perf_counter() - start) * 1000, error, attachments))
+                                            (time.perf_counter() - start) * 1000, error, attachments, confirm))
 
 
 class NoMatch(Executor):

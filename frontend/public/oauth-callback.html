@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Browser build: an MCP server's sign-in page sends the user back here. The code goes to Noah's tab (lib/mcp.js), which
+     exchanges it for tokens; this window then closes. (The server build uses its own route, /api/mcp/oauth/callback.) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Noah sign-in</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.6 system-ui, sans-serif; max-width: 520px; margin: 15vh auto; padding: 0 16px; background: Canvas; color: CanvasText; }
+</style>
+</head>
+<body>
+<h2 id="title">Signing in…</h2>
+<p id="note">Handing the sign-in back to Noah.</p>
+<script>
+  const q = new URLSearchParams(location.search);
+  const error = q.get('error_description') || q.get('error') || '';
+  const note = { noahMcpSignIn: true, code: q.get('code') || '', state: q.get('state') || '', error };
+  try { new BroadcastChannel('noah-mcp-oauth').postMessage(note); } catch (e) {}
+  document.getElementById('title').textContent = error ? 'Sign-in failed' : 'Signed in';
+  document.getElementById('note').textContent = error || 'You can close this window.';
+  if (!error) setTimeout(() => window.close(), 800);
+</script>
+</body>
+</html>

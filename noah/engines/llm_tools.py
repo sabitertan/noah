@@ -51,7 +51,7 @@ class LLMToolsEngine:
         self.base_url, self.model, self.timeout = base_url.rstrip("/"), model, timeout
         self.name = "llm_tools"
 
-    def _calls(self, message: str, experts: dict[str, Expert]) -> list[tuple[str, dict[str, Any]]]:
+    def calls(self, message: str, experts: dict[str, Expert]) -> list[tuple[str, dict[str, Any]]]:
         msg = chat(self.base_url, {
             "model": self.model, "temperature": 0, "tools": expert_tools(experts),
             "messages": [{"role": "user", "content": message}]}, self.timeout)["choices"][0]["message"]
@@ -63,7 +63,7 @@ class LLMToolsEngine:
 
     def decide(self, message: str, experts: dict[str, Expert]) -> list[Decision]:
         chosen: dict[str, Decision] = {}
-        for rank, (name, args) in enumerate(self._calls(message, experts)):
+        for rank, (name, args) in enumerate(self.calls(message, experts)):
             if name in experts and name not in chosen:
                 chosen[name] = Decision(name, round(1.0 - rank * 0.01, 2), args or None)
         rest = [Decision(n, 0.0) for n in experts if n not in chosen]

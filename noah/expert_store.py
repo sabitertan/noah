@@ -3,9 +3,12 @@
 What the UI may change is deliberately limited. A *generate* expert is pure data (description, examples, a model and a prompt),
 so it can be fully created, edited and deleted. A *tool* expert runs Python (`tool.py`); a browser must never be able to write
 code the server then executes, so for those only the routing text (description and examples) is editable here. Code stays in files.
+An *mcp* expert is an MCP server (`server:` in expert.yaml, its tools in tools.json). Adding one may start a program, so the
+server routes check for permission first (like code); here its routing text and the model that picks its tools can change.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import tempfile
@@ -37,6 +40,8 @@ class ExpertIn(BaseModel):
     description: str = Field(min_length=1, max_length=500)
     examples: list[str] = Field(min_length=1, max_length=20)
     model: str = Field(default="", max_length=200)   # generate experts: a model reference (local name, hf:…, or:…, az:…)
+    choose_tool: bool = False                         # mcp experts: the model chooses among the closest tools (else the closest wins)
+    defaults: dict[str, str] = Field(default_factory=dict[str, str], max_length=20)   # mcp experts: argument values when a message gives none
     system: str = Field(default="", max_length=4000)
     shots: list[Shot] = Field(default_factory=list[Shot], max_length=6)
     strip: list[str] = Field(default_factory=list[str], max_length=10)
@@ -123,10 +128,22 @@ def read(root: Path, name: str) -> dict[str, Any]:
     except yaml.YAMLError as e:
         raise ExpertError(f"expert.yaml is not valid YAML ({e.__class__.__name__}). Fix it in the Files tab.", 422)
     kind = m.get("kind", "tool")
-    return {"name": name, "kind": kind, "description": m.get("description", ""), "examples": m.get("examples", []),
-            "model": cast(dict[str, Any], m.get("model") or {}).get("id", ""), "system": m.get("system", ""), "shots": m.get("shots", []),
+    extra: dict[str, Any] = {}
+    if kind == "mcp":
+        from .mcp_client import describe_server
+        tools_path = path.parent / "tools.json"
+        try:
+            tools = json.loads(tools_path.read_text(encoding="utf-8")) if tools_path.is_file() else []
+        except ValueError:
+            tools = []
+        extra = {"server": describe_server(m.get("server") or {}), "tools": [
+            {"name": t.get("name", ""), "description": t.get("description", ""), "examples": t.get("examples", []),
+             "read_only": bool(t.get("annotations", {}).get("read_only_hint"))} for t in tools]}
+    editable = {"generate": "all", "mcp": "mcp"}.get(kind, "routing")
+    return {**extra, "name": name, "kind": kind, "description": m.get("description", ""), "examples": m.get("examples", []),
+            "model": cast(dict[str, Any], m.get("model") or {}).get("id", ""), "choose_tool": bool(cast(dict[str, Any], m.get("model") or {}).get("choose_tool")), "defaults": m.get("defaults") or {}, "system": m.get("system", ""), "shots": m.get("shots", []),
             "strip": m.get("strip", []), "license": m.get("license", ""),
-            "parameters": m.get("parameters", {}), "editable": "all" if kind == "generate" else "routing"}
+            "parameters": m.get("parameters", {}), "editable": editable}
 
 
 def create(root: Path, body: ExpertIn) -> str:
@@ -149,6 +166,39 @@ def create(root: Path, body: ExpertIn) -> str:
     return body.name
 
 
+def create_mcp(root: Path, data: dict[str, Any], tools: list[dict[str, Any]]) -> str:
+    """A new MCP expert: expert.yaml (from mcp_expert.manifest) and tools.json. The caller has checked permission."""
+    path = _manifest_path(root, data["name"])
+    if path.exists():
+        raise ExpertError(f"An expert named '{data['name']}' already exists.", 409)
+    write_tools(root, data["name"], tools)
+    _write(path, data)
+    return data["name"]
+
+
+def set_server(root: Path, name: str, server: dict[str, Any]) -> None:
+    """Noah's own change to an MCP expert's server entry (e.g. marking that it signs in with OAuth)."""
+    path = _manifest_path(root, name)
+    data = _load(path)
+    data["server"] = server
+    _write(path, data)
+
+
+def set_routing(root: Path, name: str, description: str, examples: list[str]) -> None:
+    """Rewrite routing text Noah wrote itself (auto_routing: true), e.g. after the tools were listed. The user's is left alone."""
+    path = _manifest_path(root, name)
+    data = _load(path)
+    if data.get("auto_routing"):
+        data["description"], data["examples"] = description, examples
+        _write(path, data)
+
+
+def write_tools(root: Path, name: str, tools: list[dict[str, Any]]) -> None:
+    folder = _dir(root, name)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "tools.json").write_text(json.dumps(tools, indent=1, ensure_ascii=False), encoding="utf-8")
+
+
 def update(root: Path, name: str, body: ExpertIn) -> None:
     path = _manifest_path(root, name)
     if not path.is_file():
@@ -157,6 +207,18 @@ def update(root: Path, name: str, body: ExpertIn) -> None:
         raise ExpertError("An expert's name cannot be changed. Create a new one and delete this one instead.")
     data = _load(path)
     data["description"], data["examples"] = body.description, body.examples        # routing text: allowed for every kind
+    data.pop("auto_routing", None)                                                    # the user's own words now: keep them
+    if data.get("kind") == "mcp":   # the model that picks a tool; none: the orchestrator's tiny model
+        data["model"] = {"backend": "openai_compat", "id": body.model} if body.model else {"backend": "orchestrator"}
+        if body.choose_tool:
+            data["model"]["choose_tool"] = True
+        defaults = {k.strip(): v.strip() for k, v in body.defaults.items() if k.strip() and v.strip()}
+        if any(len(k) > 64 or len(v) > 500 for k, v in defaults.items()):
+            raise ExpertError("A default is too long (names up to 64 characters, values up to 500).")
+        if defaults:
+            data["defaults"] = defaults
+        else:
+            data.pop("defaults", None)
     if data.get("kind", "tool") == "generate":
         if not body.model or not body.system:
             raise ExpertError("A generate expert needs a model and a system prompt.")
@@ -174,8 +236,11 @@ def delete(root: Path, name: str) -> None:
     path = _manifest_path(root, name)
     if not path.is_file():
         raise ExpertError(f"Unknown expert '{name}'", 404)
-    if _load(path).get("kind", "tool") != "generate":
+    kind = _load(path).get("kind", "tool")
+    if kind not in ("generate", "mcp"):
         raise ExpertError("This expert runs Python code. Delete its folder yourself if you really want it gone.")
+    if kind == "mcp":
+        (path.parent / "tools.json").unlink(missing_ok=True)
     path.unlink()
     try:
         path.parent.rmdir()          # only if nothing else is in the folder: never remove files we did not write

@@ -22,7 +22,8 @@ from .engines.base import DecisionEngine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
 from .generate import answer
-from . import azure, expert_files, expert_store, hf, llm, openrouter, webllm
+from . import azure, expert_files, expert_store, hf, llm, mcp_client, mcp_expert, openrouter, webllm
+from .extractors import validate_args
 from .orchestrator import Orchestrator
 from .registry import load_experts
 from .types import Expert
@@ -36,6 +37,7 @@ app = FastAPI(title="noah")
 # Desktop mode: the Electron shell sets a per-launch secret. Without it any web page the user visits could call
 # http://127.0.0.1:<port>/api (CSRF / DNS rebinding), so we also pin the Host header to loopback names.
 LAUNCH_TOKEN = os.environ.get("NOAH_LAUNCH_TOKEN", "")
+OAUTH_CALLBACK = "/api/mcp/oauth/callback"   # where an MCP server's sign-in page sends the user back (mcp_client.sign_in)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -79,7 +81,7 @@ if os.environ.get("NOAH_PARENT_PID", "").isdigit():
 
 @app.middleware("http")
 async def launch_guard(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-    if LAUNCH_TOKEN:
+    if LAUNCH_TOKEN and request.url.path != OAUTH_CALLBACK:   # the sign-in page may open in another browser; its one-time state protects it
         host = request.headers.get("host", "").rsplit(":", 1)[0].strip("[]").lower()
         supplied = request.cookies.get("noah_token", "") or request.headers.get("authorization", "").removeprefix("Bearer ")
         if host not in ("127.0.0.1", "localhost", "::1") or not hmac.compare_digest(supplied, LAUNCH_TOKEN):
@@ -219,7 +221,11 @@ def config(request: Request):
         "experts": [{"name": e.name, "description": e.description, "license": e.license,
                      "parameters": e.parameters, "examples": e.examples,
                      "kind": e.kind, "model": e.model.get("id", ""),
+                     **({"tools": [t["name"] for t in e.tools], "server": mcp_client.describe_server(e.server),
+                         "url": e.server.get("url", ""), "oauth": bool(e.server.get("oauth")),
+                         "signed_in": mcp_client.signed_in(e.server)} if e.kind == "mcp" else {}),
                      "enabled": e.name not in _disabled()} for e in experts.values()],
+        "mcp": {"available": not mcp_client.unavailable(), "why": mcp_client.unavailable()},
         "expert_errors": EXPERT_ERRORS,
     }
 
@@ -386,6 +392,169 @@ def try_expert(body: ExpertTry):
         return {"ok": False, "error": str(e)}
     except (httpx.HTTPError, KeyError, ValueError):
         return {"ok": False, "error": "The model did not answer. Is it running, and is its name right?"}
+
+
+# ---- MCP servers as experts (noah/mcp_expert.py, noah/mcp_client.py) ----
+class McpAdd(BaseModel):
+    config: str = Field(min_length=2, max_length=20000)   # pasted JSON: {"mcpServers": {...}}, {"servers": {...}} or one server
+    name: str = Field(default="", max_length=64)          # for a single pasted server
+    model: str = Field(default="", max_length=200)        # writes the tools' examples, then picks a tool for each message
+    description: str = Field(default="", max_length=500)
+
+
+class McpRefresh(BaseModel):
+    model: str = Field(default="", max_length=200)
+
+
+class McpRun(BaseModel):
+    expert: str
+    tool: str
+    arguments: dict[str, Any] = Field(default_factory=dict[str, Any])
+    always: bool = False   # also run this tool without asking from now on
+
+
+MCP_REFUSED = ("Adding an MCP server can start a program on the computer running Noah, so by default only someone at that computer "
+               "may do it (set NOAH_CODE_EDIT=1 to allow it from anywhere).")
+
+
+def _mcp_ready() -> None:
+    if why := mcp_client.unavailable():
+        raise HTTPException(400, why)
+
+
+def _mcp_expert(name: str) -> Expert:
+    e = experts.get(name)
+    if e is None or e.kind != "mcp":
+        raise HTTPException(404, f"No MCP expert named '{name}'.")
+    return e
+
+
+@app.post("/api/mcp/servers")
+def add_mcp_servers(body: McpAdd, request: Request):
+    """Connect to each pasted server, list its tools, write examples for them, and add one expert per server."""
+    _mcp_ready()
+    if not _code_edit_allowed(request):
+        raise HTTPException(403, MCP_REFUSED)
+    try:
+        pairs = mcp_expert.parse_config(body.config, mcp_expert.expert_name(body.name) if body.name.strip() else "")
+    except mcp_client.McpError as e:
+        raise HTTPException(400, str(e))
+    added: list[dict[str, Any]] = []
+    failed: list[dict[str, str]] = []
+    for name, server in pairs:
+        try:
+            if (EXPERTS_DIR / name).exists():
+                raise expert_store.ExpertError(f"An expert named '{name}' already exists. Refresh its tools instead.")
+            try:
+                tools = mcp_client.list_tools(server)
+                problems = mcp_expert.write_examples(tools, body.model, f"{OLLAMA}/v1")
+                sign_in = False
+            except mcp_client.SignInNeeded:   # added now; its tools are listed once the user has signed in
+                server, tools, problems, sign_in = {**server, "oauth": True}, [], [], True
+            data = mcp_expert.manifest(name, server, tools, body.model, body.description if len(pairs) == 1 else "")
+            expert_store.create_mcp(EXPERTS_DIR, data, tools)
+            expert_files.record(VERSIONS, name, expert_files.read_files(EXPERTS_DIR / name), "Added MCP server")
+            added.append({"name": name, "server": mcp_client.describe_server(server), "tools": len(tools), "sign_in": sign_in,
+                          "url": server.get("url", ""), "with_examples": sum(1 for t in tools if t["examples"]), "problems": problems[:5]})
+        except (mcp_client.McpError, expert_store.ExpertError) as e:
+            failed.append({"name": name, "error": str(e)})
+    _reload_experts()
+    return {"added": added, "failed": failed}
+
+
+@app.post("/api/mcp/{name}/refresh")
+def refresh_mcp_tools(name: str, body: McpRefresh):
+    """List the server's tools again. Unchanged tools keep their examples; new or changed ones get new ones."""
+    _mcp_ready()
+    e = _mcp_expert(name)
+    mcp_client.disconnect(e.server)   # reconnect, so a server that was updated or restarted is seen as it is now
+    try:
+        tools = mcp_client.list_tools(e.server)
+    except mcp_client.SignInNeeded as err:
+        if not e.server.get("oauth"):   # remember it, so the UI offers Sign in
+            expert_store.set_server(EXPERTS_DIR, name, {**e.server, "oauth": True})
+            _reload_experts()
+        raise HTTPException(401, str(err))
+    except mcp_client.McpError as err:
+        raise HTTPException(502, str(err))
+    model = body.model or str(e.model.get("id", ""))
+    problems = mcp_expert.write_examples(tools, model, f"{OLLAMA}/v1", keep=e.tools)
+    _editor(lambda: expert_files.baseline(VERSIONS, EXPERTS_DIR, name))
+    expert_store.write_tools(EXPERTS_DIR, name, tools)
+    expert_store.set_routing(EXPERTS_DIR, name, *mcp_expert.routing(name, tools))
+    expert_files.record(VERSIONS, name, expert_files.read_files(EXPERTS_DIR / name), "Refreshed tools")
+    _reload_experts()
+    return {"tools": len(tools), "with_examples": sum(1 for t in tools if t["examples"]), "problems": problems[:5]}
+
+
+@app.post("/api/mcp/run")
+def run_mcp_tool(body: McpRun):
+    """Run a tool the user confirmed in the chat (Run / Always allow)."""
+    _mcp_ready()
+    e = _mcp_expert(body.expert)
+    if e.name in _disabled():
+        raise HTTPException(409, f"Expert '{e.name}' is disabled.")
+    tool = next((t for t in e.tools if t["name"] == body.tool), None)
+    if tool is None:
+        raise HTTPException(404, f"{e.name} has no tool named '{body.tool}'.")
+    try:
+        validate_args(body.arguments, tool.get("input_schema", {}))
+    except ValueError as err:
+        raise HTTPException(400, str(err))
+    if body.always:
+        mcp_expert.allow_always(e.name, body.tool)
+    t0 = time.perf_counter()
+    try:
+        res = mcp_expert.call(e, body.tool, body.arguments)
+    except mcp_client.McpError as err:
+        res = {"text": f"Expert '{e.name}' failed: {err}", "files": [], "error": str(err)}
+    return {"output": res["text"], "attachments": res["files"], "error": res.get("error"),
+            "latency_ms": round((time.perf_counter() - t0) * 1000)}
+
+
+@app.post("/api/mcp/{name}/signin")
+def mcp_sign_in(name: str, request: Request):
+    """Start signing in to the server: {url} to open in a popup, or {signed_in: true} when it needed no sign-in."""
+    _mcp_ready()
+    e = _mcp_expert(name)
+    redirect = str(request.base_url).rstrip("/") + OAUTH_CALLBACK
+    try:
+        return mcp_client.sign_in(e.server, redirect)
+    except mcp_client.McpError as err:
+        raise HTTPException(502, str(err))
+
+
+@app.delete("/api/mcp/{name}/signin")
+def mcp_sign_out(name: str):
+    e = _mcp_expert(name)
+    mcp_client.sign_out(e.server)
+    return {"signed_in": False}
+
+
+@app.get(OAUTH_CALLBACK, include_in_schema=False)
+def mcp_oauth_callback(state: str = "", code: str = "", iss: str | None = None, error: str = "", error_description: str = ""):
+    """The server's sign-in page sends the user back here. The page tells Noah's tab (which then lists the tools) and closes."""
+    ok, message = False, error_description or error
+    if not error:
+        try:
+            mcp_client.finish_sign_in(state, code, iss)
+            ok, message = True, "Signed in. You can close this window."
+        except mcp_client.McpError as err:
+            message = str(err)
+    return HTMLResponse(oauth_page(ok, message))
+
+
+def oauth_page(ok: bool, message: str) -> str:
+    import html
+
+    note = json.dumps({"noahMcpSignIn": True, "ok": ok, "message": message})
+    return f"""<!doctype html><meta charset="utf-8"><title>Noah sign-in</title>
+<body style="font:15px/1.6 system-ui,sans-serif;max-width:520px;margin:15vh auto;padding:0 20px">
+<h2>{'Signed in' if ok else 'Sign-in failed'}</h2><p>{html.escape(message)}</p>
+<script>const note = {note};
+try {{ new BroadcastChannel('noah-mcp-oauth').postMessage(note); }} catch (e) {{}}
+try {{ window.opener && window.opener.postMessage(note, location.origin); }} catch (e) {{}}
+if (note.ok) setTimeout(() => window.close(), 800);</script></body>"""
 
 
 @app.put("/api/experts/{name}")

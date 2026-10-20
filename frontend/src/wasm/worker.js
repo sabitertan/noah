@@ -8,15 +8,18 @@ const FROM_PYPI = ['agent-framework-core==1.21.0', 'agent-framework-orchestratio
 let py = null, noah = null;
 const status = text => postMessage({ type: 'status', text });
 
-// In-browser models (`web:<id>`, noah/webllm.py): WebLLM runs in the page, so Python asks the page and waits for the answer
-// with run_sync (JSPI suspends the WebAssembly stack; this worker's event loop keeps running and receives the reply).
-const llmWaiting = new Map();
-let llmNext = 0;
-self.noahWebLLM = (body, ms) => new Promise(resolve => {
-  const id = ++llmNext;
-  llmWaiting.set(id, resolve);
-  postMessage({ type: 'llm', id, body, ms });
+// What only the page can do: in-browser models (`web:<id>`, noah/webllm.py: WebLLM) and MCP servers (noah/mcp_client.py:
+// the page's MCP client). Python asks the page and waits for the answer with run_sync (JSPI suspends the WebAssembly stack;
+// this worker's event loop keeps running and receives the reply).
+const pageWaiting = new Map();
+let pageNext = 0;
+const askPage = kind => (body, ms) => new Promise(resolve => {
+  const id = ++pageNext;
+  pageWaiting.set(id, resolve);
+  postMessage({ type: 'page', kind, id, body, ms });
 });
+self.noahWebLLM = askPage('llm');
+self.noahMcp = askPage('mcp');
 
 let saving = Promise.resolve();
 const sync = populate => (saving = saving.then(() => new Promise((ok, fail) => py.FS.syncfs(populate, e => (e ? fail(e) : ok())))));
@@ -65,6 +68,6 @@ onmessage = async ({ data }) => {
     catch (e) { postMessage({ type: 'failed', text: String(e.message || e) }); }
     return;
   }
-  if (data.type === 'llm-reply') { llmWaiting.get(data.id)?.(data.reply); llmWaiting.delete(data.id); return; }
+  if (data.type === 'page-reply') { pageWaiting.get(data.id)?.(data.reply); pageWaiting.delete(data.id); return; }
   turn = turn.then(() => answer(data));
 };
