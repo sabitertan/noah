@@ -13,6 +13,14 @@ function splash() {
   }, done: () => el.remove() };
 }
 
+// Python (in the worker) calls a `web:` model: WebLLM runs here in the page (lib/webllm.js), so answer from it
+async function webModel({ id, body, ms }) {
+  let reply;
+  try { reply = await (await import('../lib/webllm.js')).serve(body, ms); }
+  catch (e) { reply = JSON.stringify({ error: `The in-browser model failed: ${e.message || e}` }); }
+  worker.postMessage({ type: 'llm-reply', id, reply });
+}
+
 export function install() {
   const screen = splash();
   worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
@@ -23,6 +31,7 @@ export function install() {
       if (data.type === 'status') screen.set(data.text);
       else if (data.type === 'ready') { screen.done(); resolve(); }
       else if (data.type === 'failed') { screen.fail(data.text); reject(new Error(data.text)); }
+      else if (data.type === 'llm') webModel(data);   // Python calls an in-browser model (web:<id>)
       else { pending.get(data.id)?.(data); pending.delete(data.id); }
     };
   });

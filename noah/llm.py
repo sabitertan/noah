@@ -2,7 +2,8 @@
 
 A model name is local (served by Ollama or any OpenAI-compatible server at `base_url`) or hosted by a provider:
 `hf:<org>/<name>` goes to Hugging Face's Inference Providers router, `or:<org>/<name>` to OpenRouter, each with the
-user's own key. Hosted models are called through the provider's API; nothing is downloaded.
+user's own key. Hosted models are called through the provider's API; nothing is downloaded. `web:<id>` runs in the
+visitor's browser with WebLLM (browser build only, see webllm.py).
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ HF_ROUTER = os.environ.get("NOAH_HF_ROUTER", "https://router.huggingface.co/v1")
 HF_HUB = os.environ.get("NOAH_HF_HUB", "https://huggingface.co")
 AZ_PREFIX = "az:"
 OR_PREFIX = "or:"
+WEB_PREFIX = "web:"  # runs in the visitor's browser (webllm.py), not a hosted provider
 OR_BASE = os.environ.get("NOAH_OR_BASE", "https://openrouter.ai/api/v1")
 HF_ID = re.compile(r"^[\w.\-]+/[\w.\-]+(:[\w\-]+)?$")  # org/name, optionally :provider or :fastest / :cheapest
 OR_ID = re.compile(r"^~?[\w.\-]+/[\w.\-+~]+(:[\w\-]+)?$")  # org/name, optionally :free / :nitro / :floor
@@ -153,6 +155,9 @@ def _explain(p: Provider, status: int, model: str) -> str:
 def chat(base_url: str, body: dict[str, Any], timeout: float) -> dict[str, Any]:
     """POST /chat/completions to the right server for body['model'] and return the JSON reply."""
     model = body.get("model", "")
+    if str(model).startswith(WEB_PREFIX):
+        from . import webllm  # it imports LLMError from here
+        return webllm.chat(body, timeout)
     url, name, headers = resolve(base_url, model)
     try:
         endpoint, payload = f"{url.rstrip('/')}/chat/completions", {**body, "model": name}

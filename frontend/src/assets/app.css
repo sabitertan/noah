@@ -196,6 +196,7 @@ th { color: var(--muted); font-weight: 400; }
 .tab .dot { margin-left: 7px; }
 .hf { margin-top: 8px; }
 .where.az { color: #c792ea; border-color: color-mix(in srgb, #c792ea 50%, transparent); }
+.where.web { color: #4ec9b0; border-color: color-mix(in srgb, #4ec9b0 50%, transparent); }
 .choice { display: inline-flex; align-items: center; gap: 6px; color: var(--fg); cursor: pointer; }
 .choice input { width: auto; padding: 0; accent-color: var(--accent); }
 .hf td:last-child .rowact { justify-content: flex-end; }
@@ -219,6 +220,8 @@ textarea { font: inherit; resize: vertical; }
 .tryit h3 { margin: 0 0 6px; font-size: 14px; }
 .tryit h3 .meta { color: var(--muted); font-size: 11px; font-weight: 400; margin-left: 6px; }
 .tryit .a .body { white-space: pre-wrap; }
+#webTry textarea { width: 100%; }
+.webchat { display: grid; gap: 10px; max-height: 360px; overflow-y: auto; margin-bottom: 10px; }
 
 /* experts: every file in a code editor, with problems and versions */
 .panel.wide { max-width: 1320px; }

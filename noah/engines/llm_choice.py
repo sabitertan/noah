@@ -41,7 +41,7 @@ def option_probabilities(choice: dict[str, Any], labels: dict[str, str]) -> dict
     top: list[dict[str, Any]] = content[0].get("top_logprobs", []) if content else []
     for t in top:
         key = labels.get(t["token"].strip())
-        if key and key not in probs:
+        if key and key not in probs and t.get("logprob") is not None:  # null: the server had no probability for it
             probs[key] = math.exp(t["logprob"])
     if not probs:
         key = labels.get((choice["message"].get("content") or "").strip()[:1])

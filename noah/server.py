@@ -22,7 +22,7 @@ from .engines.base import DecisionEngine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
 from .generate import answer
-from . import azure, expert_files, expert_store, hf, llm, openrouter
+from . import azure, expert_files, expert_store, hf, llm, openrouter, webllm
 from .orchestrator import Orchestrator
 from .registry import load_experts
 from .types import Expert
@@ -89,6 +89,7 @@ async def launch_guard(request: Request, call_next: Callable[[Request], Awaitabl
 app.include_router(hf.router)
 app.include_router(openrouter.router)
 app.include_router(azure.router)
+app.include_router(webllm.router)
 app.mount("/assets", StaticFiles(directory=WEB / "assets", check_dir=False), name="assets")  # content-hashed JS/CSS/fonts
 PROFILES = Path(os.environ.get("NOAH_PROFILES", "data/profiles.json"))
 DEFAULT_PROFILES = [
@@ -214,6 +215,7 @@ def config(request: Request):
         "or_models": [llm.OR_PREFIX + m for m in openrouter.my_models()],
         "az": azure.status(),  # endpoint is not secret; the key never leaves the server
         "az_models": [llm.AZ_PREFIX + m for m in azure.my_models()],
+        "web_models": [webllm.PREFIX + m for m in webllm.my_models()],  # downloaded into the browser (browser build only)
         "experts": [{"name": e.name, "description": e.description, "license": e.license,
                      "parameters": e.parameters, "examples": e.examples,
                      "kind": e.kind, "model": e.model.get("id", ""),

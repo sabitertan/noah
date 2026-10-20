@@ -8,6 +8,16 @@ const FROM_PYPI = ['agent-framework-core==1.21.0', 'agent-framework-orchestratio
 let py = null, noah = null;
 const status = text => postMessage({ type: 'status', text });
 
+// In-browser models (`web:<id>`, noah/webllm.py): WebLLM runs in the page, so Python asks the page and waits for the answer
+// with run_sync (JSPI suspends the WebAssembly stack; this worker's event loop keeps running and receives the reply).
+const llmWaiting = new Map();
+let llmNext = 0;
+self.noahWebLLM = (body, ms) => new Promise(resolve => {
+  const id = ++llmNext;
+  llmWaiting.set(id, resolve);
+  postMessage({ type: 'llm', id, body, ms });
+});
+
 let saving = Promise.resolve();
 const sync = populate => (saving = saving.then(() => new Promise((ok, fail) => py.FS.syncfs(populate, e => (e ? fail(e) : ok())))));
 
@@ -47,11 +57,14 @@ async function answer({ id, method, url, headers, body }) {
   if (method !== 'GET') sync(false).catch(e => status('Could not save to the browser storage: ' + e));
 }
 
+// One request at a time: while Python waits for an in-browser model, a second request must not run in the middle of it
+let turn = Promise.resolve();
 onmessage = async ({ data }) => {
   if (data.type === 'boot') {
     try { await boot(data.zip); postMessage({ type: 'ready' }); }
     catch (e) { postMessage({ type: 'failed', text: String(e.message || e) }); }
     return;
   }
-  answer(data);
+  if (data.type === 'llm-reply') { llmWaiting.get(data.id)?.(data.reply); llmWaiting.delete(data.id); return; }
+  turn = turn.then(() => answer(data));
 };

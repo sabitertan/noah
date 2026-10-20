@@ -8,11 +8,11 @@ export const MODEL_ENGINES = ['llm_tools', 'llm_choice', 'laya'];  // engines th
 export const TITLES = { orch: 'Orchestrators', experts: 'Experts', models: 'Models', traces: 'Traces', themes: 'Themes' };
 export const VIEWS = ['chat', ...Object.keys(TITLES)];
 export const IS_WASM = import.meta.env.MODE === 'wasm';   // the browser-only build: Python runs in the page (src/wasm/)
-export const MODEL_TABS = ['local', 'hf', 'or', 'az'];  // Models page: my models, Hugging Face, OpenRouter, Azure Foundry
+export const MODEL_TABS = ['local', 'hf', 'or', 'az', 'web'];  // Models page: my models, Hugging Face, OpenRouter, Azure Foundry, WebLLM (in the browser)
 export const isOn = p => p.enabled !== false;  // profiles saved before the switch existed count as enabled
 
 /* ---------- state ---------- */
-export const cfg = ref({ engines: [], modes: [], extractors: [], models: [], experts: [], local: false, hf: {}, or: {}, az: {}, hf_models: [], or_models: [], az_models: [] });
+export const cfg = ref({ engines: [], modes: [], extractors: [], models: [], experts: [], local: false, hf: {}, or: {}, az: {}, hf_models: [], or_models: [], az_models: [], web_models: [] });
 export const profiles = ref([]);
 export const chats = ref(store.get('chats', []));
 export const currentChat = ref(store.get('current', null));
@@ -119,7 +119,8 @@ export function modelGroups(engine, cur) {
   const own = (cfg.value.engine_models || {})[engine];
   const groups = own ? [{ label: 'Models', models: own }]
     : [{ label: 'Local (Ollama)', models: cfg.value.models },
-       ...Object.entries(PROVIDERS).map(([k, p]) => ({ label: `${p.label} (hosted, no download)`, models: cfg.value[k + '_models'] || [] }))];
+       ...Object.entries(PROVIDERS).map(([k, p]) => ({ label: `${p.label} (hosted, no download)`, models: cfg.value[k + '_models'] || [] })),
+       { label: 'In this browser (WebLLM)', models: cfg.value.web_models || [] }];
   if (cur && !groups.some(g => g.models.includes(cur))) groups.unshift({ label: 'Current', models: [cur] });
   return groups.filter(g => g.models.length);
 }

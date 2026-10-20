@@ -20,8 +20,9 @@ export default defineConfig(({ mode }) => {
     // dev only: pre-bundling Monaco breaks its '?worker' imports (the worker module loses its default export)
     optimizeDeps: { exclude: ['monaco-editor', 'monaco-vs'] },
     worker: { format: 'es' },
-    // the code editor (Monaco, ~3 MB) is its own lazily loaded chunk, fetched only when an expert's Files tab opens
-    build: { outDir: wasm ? '../site' : '../noah/web/dist', emptyOutDir: true, chunkSizeWarningLimit: 4000 },
+    // big lazily loaded chunks: the code editor (Monaco, ~3 MB), fetched only when an expert's Files tab opens, and WebLLM
+    // (~6 MB, page and worker), fetched only when the Models page's WebLLM tab opens
+    build: { outDir: wasm ? '../site' : '../noah/web/dist', emptyOutDir: true, chunkSizeWarningLimit: 6500 },
     // VITE_POLL=1: poll for file changes (needed when the source is a bind mount under Docker Desktop on Windows/macOS)
     server: wasm ? { port: 5174 }
       : { port: 5173, proxy: { '/api': { target: api, changeOrigin: false } }, watch: process.env.VITE_POLL ? { usePolling: true } : undefined },
