@@ -54,8 +54,9 @@
     "mode": "build",
     "extractor": "rule",
     "model": "",
-    "planner_model": "qwen2.5-coder:1.5b",
-    "build_model": "",
-    "threshold": 0.25
+    "planner_model": "qwen2.5-coder:14b",
+    "build_model": "qwen2.5-coder:14b",
+    "threshold": 0.25,
+    "engine_model": ""
   }
 ]

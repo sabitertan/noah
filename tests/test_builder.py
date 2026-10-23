@@ -124,3 +124,42 @@ def test_a_saved_list_from_before_build_mode_gains_a_builder_and_keeps_the_rest(
     got = client.get("/api/profiles").json()
     assert got[0] == saved[0] and [(p["name"], p["mode"]) for p in got[1:]] == [("Builder", "build")]
     assert json.loads((tmp_path / "profiles.json").read_text()) == saved  # a read never rewrites the user's file
+
+
+# ---- changing an existing app instead of starting over ----
+BASE = {"plan": {"title": "Recipe book", "summary": "Recipes with search.", "features": ["search recipes"]},
+        "parts": {"html": MARKUP, "css": STYLES, "js": SCRIPT}}
+
+
+def test_a_change_rewrites_only_the_parts_the_planner_names(experts: dict[str, Expert], monkeypatch: pytest.MonkeyPatch) -> None:
+    change = {"title": "Blue Background Web App", "summary": "x", "features": ["Search recipes", "blue background"],
+              "steps": [{"expert": "css", "task": "make the page background blue"}]}
+    calls = fake_models(monkeypatch, planner=json.dumps(change))
+    html, p, steps = builder.build("make background blue", experts, "http://x/v1", base=BASE)
+    assert p["title"] == "Recipe book" and p["change"] == "make background blue"  # the app keeps its name
+    assert p["features"] == ["search recipes", "blue background"]                  # kept, plus the new one (case-insensitive)
+    assert [s["part"] for s in steps] == ["css"]
+    planner_ask = calls[0]["messages"][-1]["content"]
+    assert MARKUP in planner_ask and "make background blue" in planner_ask and "changes to a small web app" in calls[0]["messages"][0]["content"]
+    css_ask = calls[1]["messages"][-1]["content"]
+    assert STYLES in css_ask and MARKUP in css_ask and "Return the complete updated CSS" in css_ask
+    assert MARKUP in html and SCRIPT.split("//")[0] in html  # untouched parts carry over
+
+
+def test_a_change_with_no_usable_plan_revises_every_part(experts: dict[str, Expert], monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_models(monkeypatch, planner="not json")
+    p = builder.plan("add a dark mode", experts, "http://x/v1", base=BASE)
+    assert [s["part"] for s in p["steps"]] == ["html", "css", "js"] and p["base_parts"] == BASE["parts"]
+
+
+def test_a_rewrite_that_lost_most_of_the_part_keeps_the_current_one(experts: dict[str, Expert], monkeypatch: pytest.MonkeyPatch) -> None:
+    long_js = SCRIPT + "\n" + "\n".join(f"function f{i}() {{ return {i}; }}" for i in range(40))
+    monkeypatch.setattr(generate, "chat", anycall(lambda url, body, t: reply("```js\nbody.style.background = 'blue';\n```")))
+    p = {"title": "T", "summary": "s", "change": "blue", "steps": [{"expert": "javascript", "part": "js", "task": "blue"}]}
+    s = builder.run_step(p, 0, {"html": MARKUP, "js": long_js}, experts, "http://x/v1")
+    assert s["code"] == long_js and "kept the current JS" in s["error"]
+
+
+def test_a_version_saved_without_its_parts_is_split_back_into_them() -> None:
+    page = builder.assemble({"title": "T"}, BASE["parts"])
+    assert builder.split(page) == BASE["parts"]

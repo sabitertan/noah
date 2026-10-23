@@ -5,9 +5,13 @@ import { ref, computed, watch, nextTick } from 'vue';
 import UiIcon from './UiIcon.vue';
 import BuildSteps from './BuildSteps.vue';
 import PrototypeFrame from './PrototypeFrame.vue';
+import CodePanel from './CodePanel.vue';
+import { store } from '../lib/api.js';
 import { projectObj, builders, builder, buildProfile, busy, sendBuild, newProject, go } from '../store.js';
 
 const text = ref(''), box = ref(null), log = ref(null), min = ref(false);
+const code = ref(store.get('buildCode', false));   // the code panel on the right, remembered between visits
+watch(code, v => store.set('buildCode', v));
 const IDEAS = ['a habit tracker with daily streaks', 'a budget tracker with categories and a monthly total', 'a recipe book with search and favourites',
   'a pomodoro timer with a task list', 'a flashcard app to learn Spanish words'];
 const msgs = computed(() => projectObj.value?.messages || []);
@@ -33,9 +37,12 @@ watch(() => [msgs.value.length, msgs.value.at(-1)?.build?.steps.filter(s => s.st
 
 <template>
   <section class="view active" id="v-build">
-    <div class="stage">
-      <PrototypeFrame v-if="shown" :key="projectObj.id + ':' + projectObj.shown" :b="shown.build" fill />
-      <div v-else class="stage-empty">
+    <div class="stage" :class="{ split: shown && code }">
+      <PrototypeFrame v-if="shown" :key="projectObj.id + ':' + projectObj.shown" :b="shown.build" fill>
+        <template #bar><button class="btn small" type="button" :class="{ on: code }" @click="code = !code" title="See the HTML, CSS and JavaScript behind this app">{{ code ? 'Hide code' : 'Code' }}</button></template>
+      </PrototypeFrame>
+      <CodePanel v-if="shown && code" :b="shown.build" @close="code = false" />
+      <div v-if="!shown" class="stage-empty">
         <template v-if="building"><h1>Building…</h1><p>Your app appears here when it is ready. Progress is in the box on the left.</p></template>
         <template v-else>
           <h1>What do you want to build?</h1>
@@ -54,7 +61,7 @@ watch(() => [msgs.value.length, msgs.value.at(-1)?.build?.steps.filter(s => s.st
         <button class="icon-btn" type="button" title="Shrink so the app has the whole page" @click="min = true"><UiIcon name="x" :size="14" /></button>
       </div>
       <div class="fb-log" ref="log">
-        <p v-if="!msgs.length" class="fnote">Say what the app is for and what it should do. Each new message builds a new version.</p>
+        <p v-if="!msgs.length" class="fnote">Say what the app is for and what it should do. Then ask for changes: each message changes the app on screen into a new version.</p>
         <div v-for="(m, i) in msgs" :key="i" class="fb-msg" :class="{ sel: projectObj.shown === i }">
           <div class="u"><span>{{ m.text }}</span></div>
           <div v-if="m.pending && !m.build" class="typing">planning…</div>
@@ -65,7 +72,7 @@ watch(() => [msgs.value.length, msgs.value.at(-1)?.build?.steps.filter(s => s.st
       </div>
       <form class="fb-composer" @submit.prevent="send">
         <textarea ref="box" rows="1" v-model="text" @input="autosize" @keydown.enter.exact="onEnter" autocomplete="off"
-          :placeholder="msgs.length ? 'Describe the next version…' : 'Build me an app for…'"></textarea>
+          :placeholder="shown ? 'What should change?' : 'Build me an app for…'"></textarea>
         <div class="crow">
           <span v-if="builders.length > 1" class="pill" title="Build orchestrator"><UiIcon name="cpu" :size="13" />
             <select :value="builder && builder.name" @change="buildProfile = $event.target.value"><option v-for="p in builders" :key="p.name" :value="p.name">{{ p.name }}</option></select></span>

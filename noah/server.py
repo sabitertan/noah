@@ -266,6 +266,7 @@ class BuildPlanRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     model: str = Field(default="", max_length=200)   # the planner; empty: the markup expert's own model
     build_model: str = Field(default="", max_length=200)   # replaces every builder's own model; empty: each keeps its own
+    base: dict[str, Any] | None = None   # the version to change: {"plan", "parts"} (or "html" for one saved without parts)
 
 
 class BuildStepRequest(BaseModel):
@@ -294,7 +295,7 @@ def _builder(call: Callable[[], _T]) -> _T:
 @app.post("/api/build/plan")
 def build_plan(req: BuildPlanRequest):
     start = time.perf_counter()
-    p = _builder(lambda: builder.plan(req.message, _active_experts(), f"{OLLAMA}/v1", req.model, build_model=req.build_model))
+    p = _builder(lambda: builder.plan(req.message, _active_experts(), f"{OLLAMA}/v1", req.model, build_model=req.build_model, base=req.base))
     return {"plan": p, "latency_ms": (time.perf_counter() - start) * 1000}
 
 

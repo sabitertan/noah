@@ -102,7 +102,8 @@ code { background: var(--raised); padding: 1px 5px; border-radius: 4px; }
 .bsteps-wrap .head { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
 .hfbox.bigger ul { margin: 6px 0; padding-left: 18px; }
 .bbar { display: flex; gap: 6px; margin: 6px 0; }
-.bbar .grow { flex: 1; }
+.bbar .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
+.bbar .grow .fnote { margin: 0; }
 .bframe { display: block; width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .pframe.full { position: fixed; inset: 0; z-index: 20; padding: 10px 16px 16px; background: var(--bg); display: flex; flex-direction: column; }
 .pframe.full .bframe, .pframe.fill .bframe { flex: 1; height: auto; min-height: 0; }
@@ -115,6 +116,18 @@ code { background: var(--raised); padding: 1px 5px; border-radius: 4px; }
 .stage-empty { margin: 14vh auto 0; max-width: 640px; text-align: center; padding-left: 200px; }
 .stage-empty h1 { color: var(--accent); font-size: 26px; font-weight: 600; margin: 0; }
 .stage-empty p { color: var(--muted); margin: 8px 0 22px; }
+.stage.split { flex-direction: row; gap: 12px; }
+.stage.split .pframe { flex: 1 1 55%; min-width: 0; }
+.codepanel { flex: 1 1 45%; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.cp-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.cp-head .grow { flex: 1; color: var(--fg); }
+.cp-files { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 6px 0; border-bottom: 1px solid var(--border); }
+.cp-file { background: none; border: 0; border-bottom: 2px solid transparent; padding: 5px 10px; color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.cp-file.on { color: var(--fg); border-bottom-color: var(--accent); }
+.cp-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); display: inline-block; }
+.cp-editor { flex: 1; min-height: 0; }
+.bbar .btn.on { border-color: var(--accent); }
+@media (max-width: 900px) { .stage.split { flex-direction: column; } .codepanel { min-height: 300px; } }
 .floatbox { position: absolute; left: 16px; bottom: 16px; z-index: 5; width: min(400px, calc(100% - 32px)); max-height: calc(100% - 32px);
   display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
   box-shadow: 0 12px 40px rgb(0 0 0 / .35); }

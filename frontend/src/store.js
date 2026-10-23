@@ -132,7 +132,7 @@ export async function sendMessage(text) {
   return true;
 }
 
-// Builder page: each prompt builds a new version of the current project; the newest one that finished is shown.
+// Builder page: the first prompt builds the app; each later one changes the version on screen into a new version, which is then shown.
 export async function sendBuild(text) {
   const t = text.trim(), p = builder.value;
   if (!t || busy.value || !p) return false;
@@ -142,7 +142,8 @@ export async function sendBuild(text) {
   pr.messages.push({ text: t, pending: true, profile: p.name });
   const i = pr.messages.length - 1, m = pr.messages[i];
   try {
-    await runBuild(m, t, p);
+    const shownBuild = pr.messages[pr.shown]?.build;
+    await runBuild(m, t, p, shownBuild?.html ? shownBuild : null);
     pr.shown = i;
     if (pr.messages.length === 1 && m.build.title) pr.title = m.build.title;
   } catch (err) { m.error = err.message; }
@@ -157,15 +158,20 @@ async function post(url, body) {
 }
 
 // Build mode (noah/builder.py): plan, then one call per step so the card can show progress, then put the parts together.
-async function runBuild(m, text, p) {
+// With `base` (an earlier build), the app is changed rather than rebuilt: the server starts from base's parts, and the new
+// version keeps the data the app saved. Each version keeps its plan and parts, so it can be changed again later.
+async function runBuild(m, text, p, base = null) {
   const start = performance.now();
-  m.build = { steps: [], html: '', storage: {} };
+  m.build = { steps: [], html: '', storage: base ? { ...(base.storage || {}) } : {}, change: !!base };
   delete m.pending;  // the build card shows progress from here
   const b = m.build;
-  const { plan } = await post('/api/build/plan', { message: text, model: p.planner_model || '', build_model: p.build_model || '' });
-  Object.assign(b, { title: plan.title, summary: plan.summary, features: plan.features, planner: plan.planner, small: plan.small,
+  const baseIn = base && { plan: base.plan || { title: base.title, summary: base.summary, features: base.features || [] },
+    parts: base.parts || null, html: base.parts ? '' : base.html };   // versions saved before parts were kept: the server splits the page
+  const r0 = await post('/api/build/plan', { message: text, model: p.planner_model || '', build_model: p.build_model || '', base: baseIn });
+  const { base_parts: startParts, ...plan } = r0.plan;
+  Object.assign(b, { title: plan.title, summary: plan.summary, features: plan.features, planner: plan.planner, small: plan.small, change: !!plan.change,
     steps: plan.steps.map(s => ({ expert: s.expert, part: s.part, state: 'waiting' })) });
-  const parts = {}, done = [];
+  const parts = { ...(startParts || {}) }, done = [];
   for (const [i, s] of b.steps.entries()) {
     s.state = 'running';
     const r = await post('/api/build/step', { plan, index: i, parts });
@@ -175,6 +181,7 @@ async function runBuild(m, text, p) {
     done.push({ expert: r.expert, part: r.part, error: r.error, latency_ms: r.latency_ms, code: '' });
   }
   b.html = (await post('/api/build/finish', { message: text, plan, parts, steps: done, total_ms: performance.now() - start })).html;
+  Object.assign(b, { plan, parts });
 }
 
 // Model choices grouped by where they run. A saved value that is in no list stays visible instead of being swapped silently.

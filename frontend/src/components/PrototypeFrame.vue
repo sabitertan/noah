@@ -37,10 +37,10 @@ onBeforeUnmount(() => removeEventListener('message', onMessage));
 
 <template>
   <div class="pframe" :class="{ fill, full }">
-    <div class="bbar"><span class="grow"></span>
+    <div class="bbar"><slot name="bar"></slot>
+      <span class="grow"><span v-if="crash" class="fnote warn" :title="crash">The app hit an error: {{ crash }}</span></span>
       <button class="btn small" type="button" @click="restart" title="Reload the prototype with empty data">Start over</button>
       <button v-if="!fill" class="btn small" type="button" @click="full = !full">{{ full ? 'Close' : 'Full screen' }}</button></div>
     <iframe ref="frame" :key="run" class="bframe" :srcdoc="srcdoc" :title="b.title" sandbox="allow-scripts allow-forms allow-modals"></iframe>
-    <div v-if="crash" class="fnote warn">The prototype hit an error: {{ crash }}</div>
   </div>
 </template>
