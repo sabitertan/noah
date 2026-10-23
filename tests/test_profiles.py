@@ -61,7 +61,7 @@ def test_full_replace_must_keep_one_enabled(client: TestClient) -> None:
 def test_profiles_saved_before_the_switch_count_as_enabled(client: TestClient, tmp_path: Path) -> None:
     (tmp_path / "profiles.json").write_text(json.dumps([{"name": "Old", "engine": "keyword", "mode": "route",
                                                           "extractor": "rule", "model": "", "threshold": 0.1}]))
-    assert names(client) == {"Old": True}
+    assert names(client) == {"Old": True, "Builder": True}  # a list from before build mode also gets the builder
 
 
 ASK = {"message": "calculate 2 + 2", "engine": "keyword", "mode": "route", "extractor": "rule", "threshold": 0.1}

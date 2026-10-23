@@ -4,7 +4,7 @@ import UiIcon from './UiIcon.vue';
 import FileCard from './FileCard.vue';
 import PrototypeCard from './PrototypeCard.vue';
 import { fmt } from '../lib/format.js';
-import { cfg, view, IS_WASM, openModelsTab, currentChat, messages, current, enabledProfiles, activeProfile, busy, setMode, sendMessage } from '../store.js';
+import { cfg, view, IS_WASM, openModelsTab, currentChat, messages, current, builder, enabledProfiles, activeProfile, busy, setMode, sendMessage } from '../store.js';
 
 const text = ref(''), log = ref(null), box = ref(null);
 const exampleChips = computed(() => cfg.value.experts.filter(e => e.enabled).flatMap(e => e.examples.slice(0, 1)));
@@ -80,7 +80,7 @@ defineExpose({ focus: () => box.value?.focus() });
         <span class="pill" title="Orchestrator profile"><UiIcon name="cpu" :size="13" />
           <select id="profileSel" :value="current && current.name" @change="activeProfile = $event.target.value"><option v-for="p in enabledProfiles" :key="p.name" :value="p.name">{{ p.name }}</option></select></span>
         <span class="sp"></span>
-        <span class="toggle" id="modeToggle"><button type="button" data-m="route" :class="{ on: current && current.mode === 'route' }" @click="setMode('route')">Route</button><button type="button" data-m="fanout" :class="{ on: current && current.mode === 'fanout' }" @click="setMode('fanout')">Fan-out</button><button type="button" data-m="build" title="Describe an app and Noah builds a working prototype here" :class="{ on: current && current.mode === 'build' }" @click="setMode('build')">Build</button></span>
+        <span class="toggle" id="modeToggle"><button type="button" data-m="route" :class="{ on: current && current.mode === 'route' }" @click="setMode('route')">Route</button><button type="button" data-m="fanout" :class="{ on: current && current.mode === 'fanout' }" @click="setMode('fanout')">Fan-out</button><button type="button" data-m="build" :disabled="!builder" :title="builder ? `Describe an app and Noah builds a working prototype here (${builder.name})` : 'Enable a build orchestrator on the Orchestrators page first'" :class="{ on: current && current.mode === 'build' }" @click="setMode('build')">Build</button></span>
         <button class="send" id="send" :disabled="busy" title="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
       </div>
     </form>

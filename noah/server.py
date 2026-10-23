@@ -111,10 +111,12 @@ DEFAULT_PROFILES = [
     # Pull first:  ollama pull hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0   (800 MB)
     {"name": "Tev1 decision", "engine": "llm_choice", "mode": "route", "extractor": "openai_compat",
      "model": "qwen2.5:0.5b", "engine_model": "hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0", "threshold": 0.5},
-    # Build mode: a planner writes a spec, then the html, css and javascript experts build a prototype you can use in the chat.
-    {"name": "Builder", "engine": "keyword", "mode": "build", "extractor": "rule", "model": "",
-     "planner_model": "qwen2.5-coder:1.5b", "threshold": 0.25},
 ]
+# Build mode: a planner writes a spec, then the html, css and javascript experts build a prototype you can use in the chat.
+# Its own orchestrator, so the routing ones keep their settings. Saved lists from before build mode get it too (_load_profiles).
+BUILDER = {"name": "Builder", "engine": "keyword", "mode": "build", "extractor": "rule", "model": "",
+           "planner_model": "qwen2.5-coder:1.5b", "build_model": "", "threshold": 0.25}
+DEFAULT_PROFILES.append(BUILDER)
 HAS_LAYA = importlib.util.find_spec("laya") is not None  # optional extra: pip install -e ".[laya]"
 if HAS_LAYA:
     # Zero-shot Laya puts most mass on "none", so a low threshold; bench: english 20/28 routed, 4/4 declined at 0.1.
@@ -638,7 +640,11 @@ def _profile_enabled(p: dict[str, Any]) -> bool:
 def _load_profiles() -> list[dict[str, Any]]:
     if PROFILES.exists():
         try:
-            return json.loads(PROFILES.read_text())
+            saved: list[dict[str, Any]] = json.loads(PROFILES.read_text())
+            if not any(p.get("mode") == "build" for p in saved):  # saved before build mode existed (or its last one deleted)
+                name = BUILDER["name"] if all(p.get("name") != BUILDER["name"] for p in saved) else "Builder (build mode)"
+                saved.append({**BUILDER, "name": name})
+            return saved
         except (OSError, ValueError):
             pass
     return json.loads(json.dumps(DEFAULT_PROFILES))  # deep copy so callers can mutate

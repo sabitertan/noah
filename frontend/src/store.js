@@ -17,6 +17,7 @@ export const profiles = ref([]);
 export const chats = ref(store.get('chats', []));
 export const currentChat = ref(store.get('current', null));
 export const activeProfile = ref(store.get('profile', 'Default'));
+const lastRouter = ref(store.get('router', null));  // the routing orchestrator to go back to after Build
 export const groups = reactive(store.get('groups', { chats: true, setup: true }));
 export const theme = ref(store.get('theme', store.get('light', false) ? 'light-modern' : DEFAULT_THEME));  // 'light' was the old on/off switch
 export const collapsed = ref(false);
@@ -25,6 +26,7 @@ export const ready = ref(false);  // config and profiles loaded; views mount aft
 
 /* ---------- derived ---------- */
 export const enabledProfiles = computed(() => profiles.value.filter(isOn));
+export const builder = computed(() => enabledProfiles.value.find(p => p.mode === 'build'));  // the orchestrator the Build button picks
 export const current = computed(() => enabledProfiles.value.find(p => p.name === activeProfile.value) || enabledProfiles.value[0]);  // never a disabled one
 export const themeInfo = computed(() => themeById(theme.value));
 export const chatObj = computed(() => chats.value.find(c => c.id === currentChat.value));
@@ -81,6 +83,7 @@ watch([view, currentChat, modelsTab, expertSub], syncUrl);
 
 /* ---------- persistence ---------- */
 watch(activeProfile, v => store.set('profile', v));
+watch(lastRouter, v => store.set('router', v));
 watch(currentChat, v => store.set('current', v));
 watch(groups, v => store.set('groups', { ...v }), { deep: true });
 watch(themeInfo, t => { applyTheme(t); store.set('theme', t.id); }, { immediate: true });
@@ -93,7 +96,21 @@ watch([chats, currentChat], () => {  // file previews can be large and a pending
 
 /* ---------- actions ---------- */
 export const saveProfiles = () => send('/api/profiles', 'PUT', profiles.value);
-export function setMode(m) { if (!current.value) return; current.value.mode = m; saveProfiles(); }
+// Build picks the build orchestrator; Route / Fan-out go back to the routing one you were on and set its mode.
+// A routing orchestrator never becomes a builder from here (that is a choice on the Orchestrators page).
+export function setMode(m) {
+  const c = current.value;
+  if (!c) return;
+  if (m === 'build') {
+    if (c.mode !== 'build') lastRouter.value = c.name;
+    if (builder.value) activeProfile.value = builder.value.name;
+    return;
+  }
+  const p = c.mode !== 'build' ? c : enabledProfiles.value.find(x => x.name === lastRouter.value && x.mode !== 'build') || enabledProfiles.value.find(x => x.mode !== 'build');
+  if (!p) return;
+  activeProfile.value = p.name;
+  if (p.mode !== m) { p.mode = m; saveProfiles(); }
+}
 
 export async function sendMessage(text) {
   const t = text.trim(), p = current.value;

@@ -114,3 +114,13 @@ def test_builder_is_a_default_profile_and_build_a_mode(tmp_path: Path, monkeypat
     client = TestClient(server.app, base_url="http://127.0.0.1:8765")
     assert {p["name"]: p["mode"] for p in client.get("/api/profiles").json()}["Builder"] == "build"
     assert "build" in client.get("/api/config").json()["modes"]
+
+
+def test_a_saved_list_from_before_build_mode_gains_a_builder_and_keeps_the_rest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    saved = [{"name": "Default", "engine": "embedding", "mode": "route", "extractor": "openai_compat", "model": "qwen2.5:0.5b", "threshold": 0.63}]
+    (tmp_path / "profiles.json").write_text(json.dumps(saved))
+    monkeypatch.setattr(server, "PROFILES", tmp_path / "profiles.json")
+    client = TestClient(server.app, base_url="http://127.0.0.1:8765")
+    got = client.get("/api/profiles").json()
+    assert got[0] == saved[0] and [(p["name"], p["mode"]) for p in got[1:]] == [("Builder", "build")]
+    assert json.loads((tmp_path / "profiles.json").read_text()) == saved  # a read never rewrites the user's file
