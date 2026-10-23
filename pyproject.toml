@@ -18,7 +18,8 @@ dependencies = [
   "numpy>=1.26",
   "pypdf>=5",
   "pyflakes>=3",  # the expert editor lints Python before saving it
-  "mcp>=2.3",  # MCP servers as experts (noah/mcp_client.py); server and desktop builds only
+  "mcp>=2.3",
+  "anthropic>=2",  # Claude models (noah/anthropic_api.py); server and desktop builds only  # MCP servers as experts (noah/mcp_client.py); server and desktop builds only
 ]
 
 [project.optional-dependencies]

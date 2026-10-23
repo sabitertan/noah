@@ -22,7 +22,7 @@ from .engines.base import DecisionEngine
 from .engines.laya import CHECKPOINTS as LAYA_CHECKPOINTS
 from .extractors import make_extractor
 from .generate import answer
-from . import azure, expert_files, expert_store, hf, llm, mcp_client, mcp_expert, openrouter, webllm
+from . import azure, builder, claude, expert_files, expert_store, hf, llm, mcp_client, mcp_expert, oai, openrouter, webllm
 from .extractors import validate_args
 from .orchestrator import Orchestrator
 from .registry import load_experts
@@ -90,6 +90,8 @@ async def launch_guard(request: Request, call_next: Callable[[Request], Awaitabl
 
 app.include_router(hf.router)
 app.include_router(openrouter.router)
+app.include_router(oai.router)
+app.include_router(claude.router)
 app.include_router(azure.router)
 app.include_router(webllm.router)
 app.mount("/assets", StaticFiles(directory=WEB / "assets", check_dir=False), name="assets")  # content-hashed JS/CSS/fonts
@@ -109,6 +111,9 @@ DEFAULT_PROFILES = [
     # Pull first:  ollama pull hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0   (800 MB)
     {"name": "Tev1 decision", "engine": "llm_choice", "mode": "route", "extractor": "openai_compat",
      "model": "qwen2.5:0.5b", "engine_model": "hf.co/DreamBlooms/Tev1-0.8B-experimental-GGUF:Q8_0", "threshold": 0.5},
+    # Build mode: a planner writes a spec, then the html, css and javascript experts build a prototype you can use in the chat.
+    {"name": "Builder", "engine": "keyword", "mode": "build", "extractor": "rule", "model": "",
+     "planner_model": "qwen2.5-coder:1.5b", "threshold": 0.25},
 ]
 HAS_LAYA = importlib.util.find_spec("laya") is not None  # optional extra: pip install -e ".[laya]"
 if HAS_LAYA:
@@ -208,7 +213,7 @@ def config(request: Request):
         "local": _is_local(request),
         "engines": ["keyword", *(["embedding"] if HAS_EMBEDDING else []), "llm_tools", "llm_choice", *(["laya"] if HAS_LAYA else [])],
         "engine_models": {"laya": LAYA_CHECKPOINTS},  # engines whose models are not Ollama models
-        "modes": ["route", "fanout"],
+        "modes": ["route", "fanout", "build"],
         "extractors": ["rule", "openai_compat"],
         "models": models,
         "hf": hf.status(),  # whether a token is set (never the token)
@@ -217,6 +222,10 @@ def config(request: Request):
         "or_models": [llm.OR_PREFIX + m for m in openrouter.my_models()],
         "az": azure.status(),  # endpoint is not secret; the key never leaves the server
         "az_models": [llm.AZ_PREFIX + m for m in azure.my_models()],
+        "oa": oai.status(),
+        "oa_models": [llm.OA_PREFIX + m for m in oai.my_models()],
+        "an": claude.status(),
+        "an_models": [llm.AN_PREFIX + m for m in claude.my_models()],
         "web_models": [webllm.PREFIX + m for m in webllm.my_models()],  # downloaded into the browser (browser build only)
         "experts": [{"name": e.name, "description": e.description, "license": e.license,
                      "parameters": e.parameters, "examples": e.examples,
@@ -248,6 +257,54 @@ async def ask(req: AskRequest):
                         mode=req.mode, threshold=req.threshold, llm_url=f"{OLLAMA}/v1")
     results, decisions = await orch.ask_traced(req.message)
     return {"results": [asdict(r) for r in results], "decisions": [asdict(d) for d in decisions]}
+
+
+# Build mode (noah/builder.py): the page calls plan, then step once per planned step, then finish, so it can show progress.
+class BuildPlanRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    model: str = Field(default="", max_length=200)   # the planner; empty: the markup expert's own model
+    build_model: str = Field(default="", max_length=200)   # replaces every builder's own model; empty: each keeps its own
+
+
+class BuildStepRequest(BaseModel):
+    plan: dict[str, Any]
+    index: int = Field(ge=0, lt=10)
+    parts: dict[str, str] = Field(default_factory=dict[str, str])   # what earlier steps wrote ({"html": ...})
+
+
+class BuildFinishRequest(BaseModel):
+    message: str = Field(default="", max_length=4000)
+    plan: dict[str, Any]
+    parts: dict[str, str] = Field(default_factory=dict[str, str])
+    steps: list[dict[str, Any]] = Field(default_factory=list[dict[str, Any]], max_length=10)   # for the trace: expert, part, error, latency
+    total_ms: float = 0.0
+
+
+def _builder(call: Callable[[], _T]) -> _T:
+    try:
+        return call()
+    except builder.BuildError as e:
+        raise HTTPException(400, str(e))
+    except llm.LLMError as e:
+        raise HTTPException(502, str(e))
+
+
+@app.post("/api/build/plan")
+def build_plan(req: BuildPlanRequest):
+    start = time.perf_counter()
+    p = _builder(lambda: builder.plan(req.message, _active_experts(), f"{OLLAMA}/v1", req.model, build_model=req.build_model))
+    return {"plan": p, "latency_ms": (time.perf_counter() - start) * 1000}
+
+
+@app.post("/api/build/step")
+def build_step(req: BuildStepRequest):
+    return _builder(lambda: builder.run_step(req.plan, req.index, req.parts, _active_experts(), f"{OLLAMA}/v1"))
+
+
+@app.post("/api/build/finish")
+def build_finish(req: BuildFinishRequest):
+    trace.write(builder.trace_record(req.message, req.plan, req.steps, req.total_ms))
+    return {"html": builder.assemble(req.plan, req.parts)}
 
 
 class ExpertToggle(BaseModel):

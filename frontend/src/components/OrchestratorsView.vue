@@ -7,7 +7,7 @@ import { send } from '../lib/api.js';
 import { shortModel, hostedKind, PROVIDERS } from '../lib/format.js';
 import { MODEL_ENGINES, cfg, modelGroups, profiles, enabledProfiles, current, activeProfile, isOn, saveProfiles, go } from '../store.js';
 
-const FIELDS = ['name', 'engine', 'engine_model', 'mode', 'extractor', 'model', 'threshold'];  // what the editor changes ('enabled' belongs to the switch)
+const FIELDS = ['name', 'engine', 'engine_model', 'mode', 'extractor', 'model', 'threshold', 'planner_model', 'build_model'];  // what the editor changes ('enabled' belongs to the switch)
 const pick = p => Object.fromEntries(FIELDS.map(f => [f, p[f] ?? (f === 'threshold' ? 0.25 : '')]));
 
 const editing = ref(Math.max(0, profiles.value.findIndex(p => p.name === activeProfile.value)));
@@ -25,10 +25,10 @@ const message = computed(() => note.value || (saved.value && !isOn(saved.value) 
 
 const engineModelList = engine => modelGroups(engine, '').flatMap(g => g.models);
 // hosted providers this draft uses that have no key yet
-const missingKeys = computed(() => !draft.value ? [] : [...new Set([draft.value.engine_model, draft.value.model].map(hostedKind).filter(k => k && !cfg.value[k]?.configured))]);
+const missingKeys = computed(() => !draft.value ? [] : [...new Set([draft.value.engine_model, draft.value.model, draft.value.planner_model, draft.value.build_model].map(hostedKind).filter(k => k && !cfg.value[k]?.configured))]);
 const select = i => { editing.value = i; loadDraft(); };
 const shown = (x, i) => i === editing.value && draft.value ? draft.value : x;
-const summary = p => `${p.engine}${MODEL_ENGINES.includes(p.engine) ? ' (' + shortModel(p.engine_model) + ')' : ''} → ${p.mode} → ` +
+const summary = p => p.mode === 'build' ? `build: planner (${shortModel(p.planner_model) || 'the html expert model'}) → html, css, js experts${p.build_model ? ' (' + shortModel(p.build_model) + ')' : ''} → prototype` : `${p.engine}${MODEL_ENGINES.includes(p.engine) ? ' (' + shortModel(p.engine_model) + ')' : ''} → ${p.mode} → ` +
   (p.engine === 'llm_tools' ? 'model args' : p.extractor + (p.extractor === 'openai_compat' ? ' (' + shortModel(p.model) + ')' : ''));
 
 function onEngine() {  // switching engine: keep the model only if this engine offers it
@@ -81,6 +81,8 @@ async function toggle(x, ev) {
       <label>Decision engine</label><select id="f-engine" v-model="draft.engine" @change="onEngine"><option v-for="e in cfg.engines" :key="e">{{ e }}</option></select>
       <label v-show="takesModel">Orchestrator model</label><select id="f-em" v-show="takesModel" v-model="draft.engine_model"><optgroup v-for="g in modelGroups(draft.engine, draft.engine_model)" :key="g.label" :label="g.label"><option v-for="m in g.models" :key="m">{{ m }}</option></optgroup></select>
       <label>Orchestration</label><select id="f-mode" v-model="draft.mode"><option v-for="m in cfg.modes" :key="m">{{ m }}</option></select>
+      <label v-show="draft.mode === 'build'">Planner model</label><select id="f-planner" v-show="draft.mode === 'build'" v-model="draft.planner_model"><option value="">the html expert's model</option><optgroup v-for="g in modelGroups('', draft.planner_model)" :key="g.label" :label="g.label"><option v-for="m in g.models" :key="m">{{ m }}</option></optgroup></select>
+      <label v-show="draft.mode === 'build'">Builder model</label><select id="f-builder" v-show="draft.mode === 'build'" v-model="draft.build_model"><option value="">each expert's own model</option><optgroup v-for="g in modelGroups('', draft.build_model)" :key="g.label" :label="g.label"><option v-for="m in g.models" :key="m">{{ m }}</option></optgroup></select>
       <label>Argument extractor</label><select id="f-extractor" v-model="draft.extractor"><option v-for="e in cfg.extractors" :key="e">{{ e }}</option></select>
       <label>Tiny model</label><select id="f-model" v-model="draft.model" :disabled="draft.extractor !== 'openai_compat'"><option value="">—</option><optgroup v-for="g in modelGroups('openai_compat', draft.model)" :key="g.label" :label="g.label"><option v-for="m in g.models" :key="m">{{ m }}</option></optgroup></select>
       <label>Threshold <span id="f-thv">{{ draft.threshold }}</span></label><input type="range" id="f-threshold" min="0" max="1" step="0.05" v-model.number="draft.threshold">

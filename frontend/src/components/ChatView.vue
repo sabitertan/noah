@@ -2,6 +2,7 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import UiIcon from './UiIcon.vue';
 import FileCard from './FileCard.vue';
+import PrototypeCard from './PrototypeCard.vue';
 import { fmt } from '../lib/format.js';
 import { cfg, view, IS_WASM, openModelsTab, currentChat, messages, current, enabledProfiles, activeProfile, busy, setMode, sendMessage } from '../store.js';
 
@@ -34,7 +35,7 @@ async function runTool(r, always) {
 }
 const cancelTool = r => { r.output = `Cancelled: **${r.confirm.tool}** did not run.`; r.confirm = null; };
 
-watch(() => [messages.value.length, messages.value.at(-1)?.pending, currentChat.value, view.value], () => {
+watch(() => [messages.value.length, messages.value.at(-1)?.pending, messages.value.at(-1)?.build?.steps.filter(s => s.state !== 'waiting').length, messages.value.at(-1)?.build?.html, currentChat.value, view.value], () => {
   if (log.value) log.value.scrollTop = log.value.scrollHeight;
 }, { flush: 'post' });
 defineExpose({ focus: () => box.value?.focus() });
@@ -51,7 +52,8 @@ defineExpose({ focus: () => box.value?.focus() });
       </div>
       <div v-for="(m, i) in messages" :key="i" class="msg">
         <div class="u"><span>{{ m.text }}</span></div>
-        <div v-if="m.pending" class="a typing">routing…</div>
+        <div v-if="m.pending" class="a typing">{{ current && current.mode === 'build' ? 'planning…' : 'routing…' }}</div>
+        <PrototypeCard v-else-if="m.build" :b="m.build" :error="m.error" />
         <div v-else-if="m.error" class="a err"><div class="body">{{ m.error }}</div></div>
         <template v-else>
           <div v-for="(r, j) in m.results" :key="j" class="a" :class="{ err: r.error }">
@@ -73,12 +75,12 @@ defineExpose({ focus: () => box.value?.focus() });
       </div>
     </div></div>
     <form class="composer" id="form" @submit.prevent="send">
-      <textarea id="msg" ref="box" rows="1" placeholder="Message Noah…" autocomplete="off" v-model="text" @input="autosize" @keydown.enter.exact="onEnter"></textarea>
+      <textarea id="msg" ref="box" rows="1" :placeholder="current && current.mode === 'build' ? 'Describe an app to build, e.g. a habit tracker with streaks…' : 'Message Noah…'" autocomplete="off" v-model="text" @input="autosize" @keydown.enter.exact="onEnter"></textarea>
       <div class="crow">
         <span class="pill" title="Orchestrator profile"><UiIcon name="cpu" :size="13" />
           <select id="profileSel" :value="current && current.name" @change="activeProfile = $event.target.value"><option v-for="p in enabledProfiles" :key="p.name" :value="p.name">{{ p.name }}</option></select></span>
         <span class="sp"></span>
-        <span class="toggle" id="modeToggle"><button type="button" data-m="route" :class="{ on: current && current.mode === 'route' }" @click="setMode('route')">Route</button><button type="button" data-m="fanout" :class="{ on: current && current.mode === 'fanout' }" @click="setMode('fanout')">Fan-out</button></span>
+        <span class="toggle" id="modeToggle"><button type="button" data-m="route" :class="{ on: current && current.mode === 'route' }" @click="setMode('route')">Route</button><button type="button" data-m="fanout" :class="{ on: current && current.mode === 'fanout' }" @click="setMode('fanout')">Fan-out</button><button type="button" data-m="build" title="Describe an app and Noah builds a working prototype here" :class="{ on: current && current.mode === 'build' }" @click="setMode('build')">Build</button></span>
         <button class="send" id="send" :disabled="busy" title="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
       </div>
     </form>

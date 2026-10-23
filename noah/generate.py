@@ -19,9 +19,9 @@ def generate(base_url: str, model: str, system: str, message: str, timeout: floa
     return re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
 
 
-def answer(expert: Expert, message: str, llm_url: str, timeout: float = 180.0) -> str:
+def answer(expert: Expert, message: str, llm_url: str, timeout: float = 180.0, max_tokens: int = 700) -> str:
     """A generate expert's reply: its own model, system prompt and shots, then its output filters. Used for real requests and for "Try it"."""
-    out = generate(llm_url, expert.model["id"], expert.system, message, timeout=timeout, shots=expert.shots)
+    out = generate(llm_url, expert.model["id"], expert.system, message, timeout=timeout, max_tokens=max_tokens, shots=expert.shots)
     for pattern in expert.strip:
         out = re.sub(pattern, "", out, flags=re.S | re.I)
     return re.sub(r"\n{3,}", "\n\n", out).strip()

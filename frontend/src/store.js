@@ -8,11 +8,11 @@ export const MODEL_ENGINES = ['llm_tools', 'llm_choice', 'laya'];  // engines th
 export const TITLES = { orch: 'Orchestrators', experts: 'Experts', models: 'Models', traces: 'Traces', themes: 'Themes' };
 export const VIEWS = ['chat', ...Object.keys(TITLES)];
 export const IS_WASM = import.meta.env.MODE === 'wasm';   // the browser-only build: Python runs in the page (src/wasm/)
-export const MODEL_TABS = ['local', 'hf', 'or', 'az', 'web'];  // Models page: my models, Hugging Face, OpenRouter, Azure Foundry, WebLLM (in the browser)
+export const MODEL_TABS = ['local', 'hf', 'or', 'az', 'an', 'oa', 'web'];  // Models page: my models, Hugging Face, OpenRouter, Azure Foundry, Claude, OpenAI, WebLLM (in the browser)
 export const isOn = p => p.enabled !== false;  // profiles saved before the switch existed count as enabled
 
 /* ---------- state ---------- */
-export const cfg = ref({ engines: [], modes: [], extractors: [], models: [], experts: [], local: false, hf: {}, or: {}, az: {}, hf_models: [], or_models: [], az_models: [], web_models: [] });
+export const cfg = ref({ engines: [], modes: [], extractors: [], models: [], experts: [], local: false, hf: {}, or: {}, az: {}, oa: {}, an: {}, hf_models: [], or_models: [], az_models: [], oa_models: [], an_models: [], web_models: [] });
 export const profiles = ref([]);
 export const chats = ref(store.get('chats', []));
 export const currentChat = ref(store.get('current', null));
@@ -29,7 +29,7 @@ export const current = computed(() => enabledProfiles.value.find(p => p.name ===
 export const themeInfo = computed(() => themeById(theme.value));
 export const chatObj = computed(() => chats.value.find(c => c.id === currentChat.value));
 export const messages = computed(() => chatObj.value?.messages || []);
-export const hostedModels = computed(() => [...(cfg.value.hf_models || []), ...(cfg.value.or_models || []), ...(cfg.value.az_models || [])]);  // 'hf:…' / 'or:…' / 'az:…' ids the user added
+export const hostedModels = computed(() => Object.keys(PROVIDERS).flatMap(k => cfg.value[k + '_models'] || []));  // 'hf:…' / 'or:…' / 'az:…' / 'oa:…' / 'an:…' ids the user added
 export const enabledExpertCount = computed(() => cfg.value.experts.filter(e => e.enabled).length);
 
 /* ---------- routing: the URL hash is the route (#/orch, #/chat/<id>) so refresh, back/forward and deep links work ---------- */
@@ -104,13 +104,41 @@ export async function sendMessage(text) {
   c.messages.push({ text: t, pending: true });
   const m = c.messages[c.messages.length - 1];  // the reactive copy: mutate this one
   try {
+    if (p.mode === 'build') { await runBuild(m, t, p); return true; }
     const r = await send('/api/ask', 'POST', { message: t, profile: p.name, engine: p.engine, engine_model: p.engine_model || '',
       mode: p.mode, extractor: p.extractor, model: p.model, threshold: p.threshold });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'server error ' + r.status);
     Object.assign(m, await r.json(), { profile: p.name, engine: p.engine });
   } catch (err) { m.error = err.message; }
-  delete m.pending; busy.value = false;
+  finally { delete m.pending; busy.value = false; }
   return true;
+}
+
+async function post(url, body) {
+  const r = await send(url, 'POST', body), j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'server error ' + r.status);
+  return j;
+}
+
+// Build mode (noah/builder.py): plan, then one call per step so the card can show progress, then put the parts together.
+async function runBuild(m, text, p) {
+  const start = performance.now();
+  m.build = { steps: [], html: '', storage: {} };
+  delete m.pending;  // the build card shows progress from here
+  const b = m.build;
+  const { plan } = await post('/api/build/plan', { message: text, model: p.planner_model || '', build_model: p.build_model || '' });
+  Object.assign(b, { title: plan.title, summary: plan.summary, features: plan.features, planner: plan.planner, small: plan.small,
+    steps: plan.steps.map(s => ({ expert: s.expert, part: s.part, state: 'waiting' })) });
+  const parts = {}, done = [];
+  for (const [i, s] of b.steps.entries()) {
+    s.state = 'running';
+    const r = await post('/api/build/step', { plan, index: i, parts });
+    Object.assign(s, { state: r.error ? 'error' : 'done', error: r.error, ms: r.latency_ms });
+    if (r.code) parts[r.part] = r.code;
+    else if (r.part === 'html') throw new Error(r.error || 'The markup expert wrote nothing, so there is nothing to show. Try again or rephrase.');
+    done.push({ expert: r.expert, part: r.part, error: r.error, latency_ms: r.latency_ms, code: '' });
+  }
+  b.html = (await post('/api/build/finish', { message: text, plan, parts, steps: done, total_ms: performance.now() - start })).html;
 }
 
 // Model choices grouped by where they run. A saved value that is in no list stays visible instead of being swapped silently.
@@ -131,6 +159,8 @@ export async function init() {
   applyRoute();
   [cfg.value, profiles.value] = await Promise.all([getJson('/api/config'), getJson('/api/profiles')]);
   if (!chats.value.find(c => c.id === currentChat.value)) currentChat.value = null;
+  for (const m of chats.value.flatMap(c => c.messages))  // a build the page was closed during cannot resume
+    if (m.build && !m.build.html && !m.error) m.error = 'This build was interrupted. Ask again to rebuild it.';
   syncUrl();
   ready.value = true;
 }

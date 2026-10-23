@@ -41,6 +41,7 @@ def _load_one(manifest_path: Path) -> Expert:
         server=manifest.get("server", {}),
         defaults=manifest.get("defaults") or {},
         tools=tools,
+        produces=manifest.get("produces", ""),
     )
 
 

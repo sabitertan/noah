@@ -21,13 +21,15 @@ const usedByOrchestrators = m => profiles.value.flatMap(p => [
 const usedByExperts = m => cfg.value.experts.filter(e => e.kind === 'generate' && norm(e.model) === norm(m)).map(e => e.name);
 
 // tabs: panels are created the first time you open them and then kept, so a half-typed search or a running download survives switching tabs
-const seen = reactive({ local: true, hf: false, or: false, az: false, web: false });
+const seen = reactive({ local: true, hf: false, or: false, az: false, an: false, oa: false, web: false });
 watch(modelsTab, t => { seen[t] = true; }, { immediate: true });
 const tabs = computed(() => [
   { id: 'local', label: 'My models', count: cfg.value.models.length + hostedModels.value.length + (cfg.value.web_models || []).length },
   { id: 'hf', label: 'Hugging Face', count: (cfg.value.hf_models || []).length, key: cfg.value.hf?.configured },
   { id: 'or', label: 'OpenRouter', count: (cfg.value.or_models || []).length, key: cfg.value.or?.configured },
   { id: 'az', label: 'Azure Foundry', count: (cfg.value.az_models || []).length, key: cfg.value.az?.configured },
+  { id: 'an', label: 'Claude', count: (cfg.value.an_models || []).length, key: cfg.value.an?.configured },
+  { id: 'oa', label: 'OpenAI', count: (cfg.value.oa_models || []).length, key: cfg.value.oa?.configured },
   { id: 'web', label: 'WebLLM', count: Object.values(web.cached).filter(Boolean).length },
 ]);
 
@@ -35,7 +37,7 @@ const tabs = computed(() => [
 
 <template>
   <section class="view active" id="v-models"><div class="panel" id="modelsPanel">
-    <h2>Models</h2><p class="lede">Each model runs either <b>locally</b> (Ollama, downloaded to this machine) or <b>hosted</b> by Hugging Face, OpenRouter or your own Azure Foundry resource (called through their API with your own key, nothing downloaded). Pick either kind anywhere a model is chosen. Any OpenAI-compatible local server works too. The <b>WebLLM</b> tab runs a small model inside this browser on your GPU, to try it out.</p>
+    <h2>Models</h2><p class="lede">Each model runs either <b>locally</b> (Ollama, downloaded to this machine) or <b>hosted</b> by Hugging Face, OpenRouter, your own Azure Foundry resource, Anthropic (Claude) or OpenAI (called through their API with your own key, nothing downloaded). Pick either kind anywhere a model is chosen. Any OpenAI-compatible local server works too. The <b>WebLLM</b> tab runs a small model inside this browser on your GPU, to try it out.</p>
 
     <div class="tabs" role="tablist">
       <button v-for="t in tabs" :key="t.id" class="tab" :class="{ active: modelsTab === t.id }" role="tab" :aria-selected="modelsTab === t.id" :data-tab="t.id" @click="openModelsTab(t.id)">
@@ -69,6 +71,10 @@ const tabs = computed(() => [
     <HostedPanel v-if="seen.or" v-show="modelsTab === 'or'" provider="or" search-hint="Search OpenRouter models, e.g. llama, gpt, claude, free…" manual-hint="Or any model id, e.g. meta-llama/llama-3.3-70b-instruct:free"
       help="Needed for hosted models. Create a key at openrouter.ai/keys." />
     <AzurePanel v-if="seen.az" v-show="modelsTab === 'az'" />
+    <HostedPanel v-if="seen.an" v-show="modelsTab === 'an'" provider="an" search-hint="Filter Claude models, e.g. opus, sonnet, haiku…" manual-hint="Or any Claude model id, e.g. claude-opus-5-5"
+      help="Create an API key at console.anthropic.com. A Claude.ai Pro or Max subscription is not an API key: API use is billed separately, per token." />
+    <HostedPanel v-if="seen.oa" v-show="modelsTab === 'oa'" provider="oa" search-hint="Filter OpenAI models, e.g. gpt-5, mini…" manual-hint="Or any OpenAI model id, e.g. gpt-5-mini"
+      help="Create an API key at platform.openai.com/api-keys. A ChatGPT Plus or Pro subscription does not include API access: API use is billed separately, per token." />
     <WebLlmPanel v-if="seen.web" v-show="modelsTab === 'web'" />
   </div></section>
 </template>

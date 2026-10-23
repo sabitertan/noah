@@ -13,10 +13,11 @@ export function fmt(text) {
 export const humanSize = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
 export const countLabel = (on, total) => on === total ? String(total) : `${on}/${total}`;  // "7", or "5/7" when some are off
 // Hosted models are called through a provider's API and never downloaded: 'hf:org/name' (Hugging Face), 'or:org/name' (OpenRouter),
-// 'az:<deployment>' (a deployment on your own Azure Foundry resource).
+// 'az:<deployment>' (a deployment on your own Azure Foundry resource), 'oa:<model>' (OpenAI) and 'an:<model>' (Claude, from Anthropic).
 export const PROVIDERS = { hf: { label: 'Hugging Face', prefix: 'hf:', secret: 'token' }, or: { label: 'OpenRouter', prefix: 'or:', secret: 'API key' },
-  az: { label: 'Azure Foundry', prefix: 'az:', secret: 'connection' } };
+  az: { label: 'Azure Foundry', prefix: 'az:', secret: 'connection' }, oa: { label: 'OpenAI', prefix: 'oa:', secret: 'API key' },
+  an: { label: 'Claude', prefix: 'an:', secret: 'API key' } };
 export const hostedKind = m => Object.keys(PROVIDERS).find(k => String(m || '').startsWith(PROVIDERS[k].prefix)) || '';
 export const isHosted = m => hostedKind(m) !== '';
-export const shortModel = m => (isHosted(m) ? '☁ ' : '') + String(m || '').replace(/^(hf|or|az):/, '').replace(/^hf\.co\//, '').split('/').pop();
+export const shortModel = m => (isHosted(m) ? '☁ ' : '') + String(m || '').replace(/^(hf|or|az|oa|an):/, '').replace(/^hf\.co\//, '').split('/').pop();
 export const norm = m => { m = String(m || ''); return m && !m.split('/').pop().includes(':') ? m + ':latest' : m; };  // "x" == "x:latest"

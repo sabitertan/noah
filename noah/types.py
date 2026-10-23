@@ -23,6 +23,7 @@ class Expert:
     server: dict[str, Any] = field(default_factory=dict[str, Any])  # mcp: how to reach the server ({url, headers} or {command, args, env})
     tools: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])  # mcp: the server's tools (tools.json), each with examples
     defaults: dict[str, Any] = field(default_factory=dict[str, Any])  # mcp: argument values to use when a message gives none (path: D:/notes)
+    produces: str = ""  # build mode: the part of a prototype this expert writes ("html" | "css" | "js"), see builder.py
 
     @property
     def routing_texts(self) -> list[str]:

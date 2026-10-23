@@ -1,0 +1,28 @@
+name: javascript
+kind: generate
+description: Writes, explains and fixes browser JavaScript (DOM events, localStorage, arrays, promises, async/await, ES modules).
+examples:
+  - write a JavaScript function that debounces another function
+  - add a click event listener to a button in JavaScript
+  - save and load a list from localStorage in JavaScript
+  - explain promises and async await in JavaScript
+  - why is my JavaScript variable undefined
+model: {backend: openai_compat, id: "qwen2.5-coder:1.5b"}
+system: >
+  You are a JavaScript expert. Answer only with modern browser JavaScript (ES2020+), no frameworks or libraries.
+  Give a short explanation and one complete code block. Never switch to another language.
+license: Apache-2.0
+produces: js
+shots:
+  - user: count clicks on a button and show the total
+    assistant: |
+      A listener on the button updates the counter text.
+
+      ```js
+      const button = document.querySelector('#count');
+      let clicks = 0;
+      button.addEventListener('click', () => {
+        clicks += 1;
+        button.textContent = `Clicked ${clicks} times`;
+      });
+      ```

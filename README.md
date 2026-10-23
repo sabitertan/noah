@@ -53,11 +53,26 @@ Regenerate them against a running server with `python scripts/readme_shots.py` (
 
 | Page | What it does | URL |
 |---|---|---|
-| Chat | Ask anything; pick an orchestrator and Route / Fan-out; open "routing decision" to see every expert's score; file results open in place | `#/chat`, `#/chat/<id>` |
+| Chat | Ask anything; pick an orchestrator and Route / Fan-out / Build; open "routing decision" to see every expert's score; file results open in place | `#/chat`, `#/chat/<id>` |
 | Orchestrators | Cards for saved profiles with an on/off switch each; the editor below changes a draft that the selected card shows live ("unsaved") until you Save | `#/orch` |
 | Experts | Every expert with its examples and an on/off switch; select one for its settings or all its files in a code editor, with checks before saving and versions; **Add MCP server** turns an MCP server into an expert | `#/experts`, `#/experts/<name>` |
 | Models | Tabs: **My models** (every model and where it runs), **Hugging Face** (hosted or GGUF download), **OpenRouter** and **Azure Foundry** (hosted), **WebLLM** (download a small model into the browser and try it) | `#/models`, `#/models/hf`, `#/models/or`, `#/models/az`, `#/models/web` |
 | Traces | Every routing decision, the raw material for fine-tuning | `#/traces` |
+
+**Build mode** (the Build toggle, or the Builder orchestrator): describe an app ("a habit tracker with streaks") and Noah
+builds a working single-page prototype right in the chat. A planner model writes a short spec, then the experts that
+declare `produces: html | css | js` in `expert.yaml` write the markup, the styles and the script, each seeing the markup so
+ids line up (`noah/builder.py`). The result is one self-contained HTML file with no server or database: it runs in a
+sandboxed frame that cannot reach Noah, and what it saves in `localStorage` is kept with the chat. "Start over" clears it.
+From the CLI: `noah build "a todo list" -o todo.html`. A bigger planner model (set it on the Orchestrators page) plans
+better than the default 1.5B one, and a **Builder model** there switches all three builder experts at once. When a build
+used small models, the result says so and suggests bigger ones: open models first (Qwen2.5-Coder 14B/32B, Qwen3-Coder,
+Devstral, gpt-oss in Ollama, or the same through Hugging Face / OpenRouter), then your own Claude or OpenAI API key.
+
+**Claude and OpenAI** (Models > Claude, Models > OpenAI): bring your own API key from console.anthropic.com or
+platform.openai.com. Claude goes through the official Anthropic SDK (`noah/anthropic_api.py`), OpenAI through its
+chat-completions API. A Claude.ai (Pro/Max) or ChatGPT (Plus/Pro) subscription is not an API key and cannot be used:
+API use is billed per token by each provider. Neither is available in the in-browser build.
 
 The sidebar shows how many orchestrators and experts are enabled (for example `5/7`). The page is kept in the URL, so a
 refresh, the back button and bookmarks all land where you were. Chats are stored in your browser. Light and dark themes

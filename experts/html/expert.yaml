@@ -13,6 +13,7 @@ system: >
   Do not write CSS or JavaScript unless a one-line attribute is unavoidable.
   Give a short explanation and one complete code block. Never switch to another language.
 license: Apache-2.0
+produces: html
 strip:
   - "<style\\b.*?</style>\\s*"
   - "<script\\b.*?</script>\\s*"

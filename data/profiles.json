@@ -2,7 +2,7 @@
   {
     "name": "Default",
     "engine": "embedding",
-    "mode": "route",
+    "mode": "build",
     "extractor": "openai_compat",
     "model": "qwen2.5:0.5b",
     "threshold": 0.63,

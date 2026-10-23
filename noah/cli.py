@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 
+from . import builder
 from .engines import make_engine
 from .extractors import make_extractor
 from .orchestrator import Orchestrator
@@ -24,6 +25,12 @@ def main() -> None:
     ask.add_argument("--threshold", type=float, default=0.25)
     ask.add_argument("--base-url", default="http://localhost:11434/v1")
     ask.add_argument("--model", default="functiongemma")
+    bld = sub.add_parser("build", help="build a single-page prototype and write it to an HTML file")
+    bld.add_argument("message")
+    bld.add_argument("--planner", default="", help="planner model (default: the html expert's model)")
+    bld.add_argument("--model", default="", help="model for every builder expert (default: each expert's own)")
+    bld.add_argument("--base-url", default="http://localhost:11434/v1")
+    bld.add_argument("-o", "--out", default="prototype.html")
     sub.add_parser("experts")
     sub.add_parser("trace")
     a = p.parse_args()
@@ -32,6 +39,18 @@ def main() -> None:
     if a.cmd == "experts":
         for e in experts.values():
             print(f"{e.name:10} {e.license:8} {e.description}")
+    elif a.cmd == "build":
+        html, plan, steps = builder.build(a.message, experts, a.base_url, a.planner, a.model)
+        print(f"{plan['title']}: {plan['summary']}")
+        for s in steps:
+            print(f"  [{s['expert']} -> {s['part']}, {s['latency_ms']:.0f} ms] {s['error'] or str(len(s['code'])) + ' chars'}")
+        with open(a.out, "w", encoding="utf-8") as f:
+            f.write(html)
+        print(f"wrote {a.out}")
+        if plan["small"]:
+            print(f"Built with small models ({', '.join(plan['small'])}). For bigger apps try --planner/--model qwen2.5-coder:14b or larger,
+"
+                  "a hosted open model (hf:..., or:...), or your own Claude (an:claude-opus-5-5) or OpenAI (oa:...) API key.")
     elif a.cmd == "trace":
         for r in TraceStore().read():
             print(json.dumps(r))
