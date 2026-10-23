@@ -1,7 +1,8 @@
 <script setup>
 import UiIcon from './UiIcon.vue';
 import { countLabel } from '../lib/format.js';
-import { cfg, chats, currentChat, view, groups, themeInfo, collapsed, profiles, enabledProfiles, enabledExpertCount, go, openChat, newChat, deleteChat } from '../store.js';
+import { cfg, chats, currentChat, view, groups, themeInfo, collapsed, profiles, enabledProfiles, enabledExpertCount, go, openChat, newChat, deleteChat,
+  projects, currentProject, openProject, newProject, deleteProject } from '../store.js';
 </script>
 
 <template>
@@ -12,6 +13,17 @@ import { cfg, chats, currentChat, view, groups, themeInfo, collapsed, profiles, 
     </div>
     <div class="sb-inner" id="sbInner">
       <div class="item" id="newChat" @click="newChat"><UiIcon name="plus" /><span class="grow">New Chat</span></div>
+
+      <div class="item" id="newApp" :class="{ active: view === 'build' && !currentProject }" @click="newProject"><UiIcon name="spark" /><span class="grow">Build an app</span></div>
+
+      <div class="item" :class="{ open: groups.projects !== false }" data-group="projects" @click="groups.projects = groups.projects === false"><UiIcon name="box" /><span class="grow">Projects</span><UiIcon name="chev" :size="12" class="chev" /></div>
+      <div class="group-body" :class="{ closed: groups.projects === false }">
+        <div v-for="p in projects" :key="p.id" class="item chat-item" :class="{ active: p.id === currentProject && view === 'build' }" :data-project="p.id" @click="openProject(p.id)">
+          <span class="grow">{{ p.title }}</span>
+          <button class="icon-btn del" title="Delete" @click.stop="deleteProject(p.id)"><UiIcon name="x" :size="12" /></button>
+        </div>
+        <div v-if="!projects.length" class="item"><span class="meta">No apps yet</span></div>
+      </div>
 
       <div class="item" :class="{ open: groups.chats }" data-group="chats" @click="groups.chats = !groups.chats"><UiIcon name="chat" /><span class="grow">Chats</span><UiIcon name="chev" :size="12" class="chev" /></div>
       <div class="group-body" :class="{ closed: !groups.chats }">
